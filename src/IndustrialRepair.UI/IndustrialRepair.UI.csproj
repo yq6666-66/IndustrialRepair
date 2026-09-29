@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\IndustrialRepair.BLL\IndustrialRepair.BLL.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SunnyUI" Version="3.9.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\db\01_init.sql" Link="db\01_init.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\db\02_procs.sql" Link="db\02_procs.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

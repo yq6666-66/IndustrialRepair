@@ -1,0 +1,23 @@
+# 构建产物
+bin/
+obj/
+publish/
+*.user
+*.suo
+.vs/
+*.rsuser
+
+# Rider/VS Code
+.idea/
+.vscode/
+
+# 测试与临时
+TestResults/
+*.tmp
+*.log
+
+# 本机私有配置（连接串默认内置，如需覆盖放 appsettings.json 但不入库）
+src/IndustrialRepair.UI/appsettings.*.json
+
+# 报告导出与截图草稿不入库（终稿手动添加）
+docs/exports/
