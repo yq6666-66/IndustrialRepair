@@ -28,6 +28,20 @@ SunnyUI（~4k★ MIT）· OpenCvSharp（~6.1k★ Apache-2.0）· QRCoder（~3.7k
 - .NET SDK 8+（<https://dotnet.microsoft.com>）
 - SQL Server LocalDB（随 Visual Studio / SSMS 安装；或 SQL Server Express）
 
+### 1.5 本机环境清单（已配置，2026-09-30）
+
+| 组件 | 本机状态 |
+|---|---|
+| Visual Studio 2022 Community 17.14（.NET 桌面开发工作负载） | ✅ 已装，可直接打开 `IndustrialRepair.sln` |
+| .NET SDK（9.0.306 / 8.x）+ 运行时 7/8/9 | ✅ 已装 |
+| SQL Server LocalDB（实例 MSSQLLocalDB）+ IndustrialRepairDb | ✅ 已建库播种（16 表 / 9 存储过程 / 3 触发器 / 4 视图） |
+| SSMS（SQL Server Management Studio） | ✅ 已装（连 `(localdb)\MSSQLLocalDB`） |
+| 7-Zip | ✅ 已装（打包提交件） |
+| git 仓库 | ✅ 已初始化并首次提交（本地仓库） |
+| Release 发布包 | ✅ `publish/IndustrialRepair.UI.exe`，桌面快捷方式「工业维修智能化零件分配平台」 |
+
+> 换机重装参考：`winget install Microsoft.DotNet.SDK.8 7zip.7zip Microsoft.SQLServerManagementStudio`（VS2022 Community 用 Visual Studio Installer 勾选「.NET 桌面开发」），然后登录页点「一键初始化」。
+
 ### 2. 初始化数据库（二选一）
 
 **方式 A（推荐）**：直接运行程序，登录界面点 **「一键初始化」** 按钮——自动建库、建表、存储过程/触发器/视图、播种默认账号与演示工单。
