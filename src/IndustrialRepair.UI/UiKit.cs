@@ -10,7 +10,11 @@ internal static class Ui
 {
     public static UIButton Btn(string text, int x, int y, int w = 88, int h = 34, EventHandler? onClick = null)
     {
-        var b = new UIButton { Text = text, Location = new Point(x, y), Size = new Size(w, h) };
+        var b = new UIButton
+        {
+            Text = text, Location = new Point(x, y), Size = new Size(w, h),
+            Font = new Font("微软雅黑", 9.5F), Cursor = Cursors.Hand
+        };
         if (onClick != null) b.Click += onClick;
         return b;
     }
@@ -37,10 +41,33 @@ internal static class Ui
         {
             Location = new Point(x, y), Size = new Size(w, h),
             Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
-            ReadOnly = true, AllowUserToAddRows = false, RowHeadersVisible = false,
-            SelectionMode = DataGridViewSelectionMode.FullRowSelect, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-            BackgroundColor = Color.White
+            ReadOnly = true, AllowUserToAddRows = false, AllowUserToResizeRows = false,
+            RowHeadersVisible = false, EnableHeadersVisualStyles = false,
+            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+            BackgroundColor = Color.White, BorderStyle = BorderStyle.None,
+            GridColor = Color.FromArgb(226, 232, 240),
+            CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
+            ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
+            ColumnHeadersHeight = 40,
+            RowTemplate = { Height = 34 }
         };
+        // 深色表头 + 斑马纹 + 品牌蓝选中高亮（全系统表格统一样式）
+        g.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
+        g.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(32, 41, 56);
+        g.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
+        g.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(32, 41, 56);
+        g.ColumnHeadersDefaultCellStyle.Font = new Font("微软雅黑", 9.5F, FontStyle.Bold);
+        g.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
+        g.DefaultCellStyle.Font = new Font("微软雅黑", 9.5F);
+        g.DefaultCellStyle.ForeColor = Color.FromArgb(48, 56, 68);
+        g.DefaultCellStyle.SelectionBackColor = Color.FromArgb(41, 108, 202);
+        g.DefaultCellStyle.SelectionForeColor = Color.White;
+        g.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
+        g.DefaultCellStyle.WrapMode = DataGridViewTriState.False;
+        g.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(246, 249, 252);
+        g.AlternatingRowsDefaultCellStyle.SelectionBackColor = Color.FromArgb(41, 108, 202);
+        g.AlternatingRowsDefaultCellStyle.SelectionForeColor = Color.White;
         return g;
     }
 

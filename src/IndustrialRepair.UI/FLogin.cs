@@ -10,18 +10,17 @@ namespace IndustrialRepair.UI;
 
 /// <summary>
 /// 登录窗体：图形验证码 → 口令（bcrypt 校验）→ 可选多因素认证 → 进入系统。
-/// 含注册、找回密码、一键初始化数据库。
+/// 含注册、找回密码、一键初始化数据库。左侧品牌区 + 右侧卡片式表单。
 /// </summary>
 public class FLogin : UIForm
 {
-    private readonly UITextBox _txtUser = Ui.Txt("用户名", 130, 78, 220);
-    private readonly UITextBox _txtPwd = Ui.Txt("密码", 130, 120, 220, password: true);
-    private readonly UITextBox _txtCaptcha = Ui.Txt("验证码", 130, 162, 100);
-    private readonly PictureBox _picCaptcha = new() { Location = new Point(240, 158), Size = new Size(110, 36), Cursor = Cursors.Hand };
+    private readonly UITextBox _txtUser;
+    private readonly UITextBox _txtPwd;
+    private readonly UITextBox _txtCaptcha;
+    private readonly PictureBox _picCaptcha = new() { Cursor = Cursors.Hand };
     private readonly UILabel _lblHint = new()
     {
-        Location = new Point(60, 250), Size = new Size(330, 40), AutoSize = false,
-        ForeColor = Color.Firebrick, TextAlign = ContentAlignment.MiddleCenter
+        AutoSize = false, ForeColor = Color.Firebrick, TextAlign = ContentAlignment.MiddleCenter
     };
 
     private readonly AuthService _auth = new();
@@ -31,46 +30,108 @@ public class FLogin : UIForm
 
     public FLogin()
     {
-        Text = "登录";
-        ClientSize = new Size(450, 400);
+        Text = "登录 · 工业维修智能化零件分配平台";
+        ClientSize = new Size(860, 540);
         StartPosition = FormStartPosition.CenterScreen;
-        ShowTitle = true;
-        TitleFont = new Font("微软雅黑", 13F, FontStyle.Bold);
+        MaximizeBox = false;
+        FormBorderStyle = FormBorderStyle.FixedSingle;
+        BackColor = Color.FromArgb(240, 243, 248);
 
-        var title = new UILabel
+        // ---- 左侧品牌区（渐变 + 装饰圆） ----
+        var brand = new Panel { Dock = DockStyle.Left, Width = 380 };
+        brand.Paint += (_, e) =>
         {
-            Text = "工业维修智能化零件分配平台",
-            Location = new Point(40, 26), Size = new Size(370, 34), AutoSize = false,
-            Font = new Font("微软雅黑", 15F, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var brush = new LinearGradientBrush(brand.ClientRectangle,
+                Color.FromArgb(22, 66, 134), Color.FromArgb(45, 116, 214), 90f))
+                g.FillRectangle(brush, brand.ClientRectangle);
+            using (var pen = new Pen(Color.FromArgb(38, 255, 255, 255), 2f))
+            {
+                g.DrawEllipse(pen, -70, 340, 230, 230);
+                g.DrawEllipse(pen, 266, 36, 170, 170);
+            }
+            using (var brush = new SolidBrush(Color.FromArgb(26, 255, 255, 255)))
+            {
+                g.FillEllipse(brush, 302, 428, 92, 92);
+                g.FillEllipse(brush, -34, 56, 124, 124);
+            }
         };
-        var subTitle = new UILabel
+
+        UILabel Brand(string text, int y, int h, float size, Color color, bool bold = false) => new()
         {
-            Text = "拍照 · 识别 · 智能算料一体化维修系统",
-            Location = new Point(40, 60), Size = new Size(370, 20), AutoSize = false,
-            Font = new Font("微软雅黑", 9F), ForeColor = Color.Gray, TextAlign = ContentAlignment.MiddleCenter
+            Text = text, Location = new Point(36, y), Size = new Size(320, h), AutoSize = false,
+            BackColor = Color.Transparent, ForeColor = color,
+            Font = new Font("微软雅黑", size, bold ? FontStyle.Bold : FontStyle.Regular)
         };
 
-        var lblUser = Ui.Lbl("用户名：", 40, 78, 80);
-        var lblPwd = Ui.Lbl("密码：", 40, 120, 80);
-        var lblCap = Ui.Lbl("验证码：", 40, 162, 80);
+        brand.Controls.AddRange(new Control[]
+        {
+            Brand("工业维修", 66, 52, 28F, Color.White, true),
+            Brand("智能化零件分配平台", 122, 34, 17F, Color.White, true),
+            Brand("拍照 · 识别 · 智能算料一体化维修系统", 162, 22, 9.5F, Color.FromArgb(178, 205, 240)),
+            Brand("●  拍照识别：OpenCV + ZXing 双引擎", 292, 24, 9.5F, Color.FromArgb(226, 236, 250)),
+            Brand("●  BOM 智能算料 · 冗余系数可调", 326, 24, 9.5F, Color.FromArgb(226, 236, 250)),
+            Brand("●  MQTT 设备遥测 · 越限自动报修", 360, 24, 9.5F, Color.FromArgb(226, 236, 250)),
+            Brand("●  RBAC 权限 · bcrypt · 全程留痕", 394, 24, 9.5F, Color.FromArgb(226, 236, 250)),
+            Brand("v1.0 · WinForm + ADO.NET + SQL Server 三层架构", 486, 20, 8.5F, Color.FromArgb(148, 178, 216))
+        });
 
-        var btnLogin = Ui.Btn("登 录", 130, 205, 220, 38, OnLogin);
-        btnLogin.Font = new Font("微软雅黑", 10.5F, FontStyle.Bold);
+        // ---- 右侧登录卡片 ----
+        var card = new UIPanel
+        {
+            Location = new Point(420, 66), Size = new Size(400, 384),
+            FillColor = Color.White, Radius = 12, RectColor = Color.FromArgb(226, 232, 240)
+        };
+        var lblWelcome = new UILabel
+        {
+            Text = "欢迎登录", ForeColor = Color.FromArgb(32, 41, 56), Font = new Font("微软雅黑", 15F, FontStyle.Bold),
+            Location = new Point(32, 26), Size = new Size(336, 30), AutoSize = false
+        };
+        var lblSub = new UILabel
+        {
+            Text = "请输入账号信息进入系统", ForeColor = Color.Gray, Font = new Font("微软雅黑", 9F),
+            Location = new Point(32, 58), Size = new Size(336, 20), AutoSize = false
+        };
 
-        var btnReg = Ui.Btn("注册账号", 60, 296, 100, 30, (_, _) => new FRegister().ShowDialog());
-        var btnFind = Ui.Btn("找回密码", 170, 296, 100, 30, (_, _) => new FFindBack().ShowDialog());
-        var btnInit = Ui.Btn("一键初始化", 280, 296, 110, 30, OnInitDb);
+        _txtUser = Ui.Txt("用户名 / 工号", 32, 96, 336);
+        _txtPwd = Ui.Txt("密码", 32, 142, 336, password: true);
+        _txtCaptcha = Ui.Txt("验证码", 32, 188, 196);
+        _picCaptcha.Location = new Point(240, 186);
+        _picCaptcha.Size = new Size(128, 34);
+
+        var btnLogin = new UIButton
+        {
+            Text = "登  录", Location = new Point(32, 236), Size = new Size(336, 44),
+            FillColor = Color.FromArgb(41, 108, 202), RectColor = Color.FromArgb(41, 108, 202),
+            ForeColor = Color.White, Font = new Font("微软雅黑", 11F, FontStyle.Bold), Cursor = Cursors.Hand
+        };
+        btnLogin.Click += OnLogin;
+
+        _lblHint.Location = new Point(32, 288);
+        _lblHint.Size = new Size(336, 20);
+        _lblHint.Font = new Font("微软雅黑", 8.5F);
+
+        var btnReg = Ui.Btn("注册账号", 32, 322, 100, 30, (_, _) => new FRegister().ShowDialog());
+        var btnFind = Ui.Btn("找回密码", 142, 322, 100, 30, (_, _) => new FFindBack().ShowDialog());
+        var btnInit = Ui.Btn("一键初始化", 252, 322, 116, 30, OnInitDb);
+
+        card.Controls.AddRange(new Control[]
+        {
+            lblWelcome, lblSub, _txtUser, _txtPwd, _txtCaptcha, _picCaptcha,
+            btnLogin, _lblHint, btnReg, btnFind, btnInit
+        });
 
         var demo = new UILabel
         {
-            Text = "默认账号：admin / warehouse / engineer / reporter，密码 123456",
-            Location = new Point(40, 340), Size = new Size(370, 20), AutoSize = false,
-            ForeColor = Color.Gray, Font = new Font("微软雅黑", 8.5F), TextAlign = ContentAlignment.MiddleCenter
+            Text = "演示账号：admin / warehouse / engineer / reporter · 密码 123456",
+            Location = new Point(380, 480), Size = new Size(480, 20), AutoSize = false,
+            ForeColor = Color.FromArgb(130, 140, 155), Font = new Font("微软雅黑", 8.5F),
+            TextAlign = ContentAlignment.MiddleCenter
         };
 
         _picCaptcha.Click += (_, _) => NewCaptcha();
-        Controls.AddRange(new Control[] { title, subTitle, lblUser, _txtUser, lblPwd, _txtPwd, lblCap, _txtCaptcha, _picCaptcha, btnLogin, _lblHint, btnReg, btnFind, btnInit, demo });
-        AcceptButton = null;
+        Controls.AddRange(new Control[] { card, demo, brand });
         KeyPreview = true;
         KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) OnLogin(null, EventArgs.Empty); };
         NewCaptcha();
@@ -103,8 +164,8 @@ public class FLogin : UIForm
             bmp.SetPixel(rnd.Next(bmp.Width), rnd.Next(bmp.Height), Color.FromArgb(rnd.Next(256), rnd.Next(256), rnd.Next(256)));
         for (int i = 0; i < 4; i++)
         {
-            float x = 10 + i * 26 + rnd.Next(-3, 3), y = 6 + rnd.Next(-3, 3);
-            using var font = new Font("Arial", 16 + rnd.Next(3), FontStyle.Bold);
+            float x = 12 + i * 28 + rnd.Next(-3, 3), y = 5 + rnd.Next(-3, 3);
+            using var font = new Font("Arial", 15 + rnd.Next(3), FontStyle.Bold);
             using var brush = new SolidBrush(Color.FromArgb(rnd.Next(0, 120), rnd.Next(0, 120), rnd.Next(0, 160)));
             g.TranslateTransform(x, y);
             g.RotateTransform(rnd.Next(-14, 14));
