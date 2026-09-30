@@ -21,3 +21,4 @@ src/IndustrialRepair.UI/appsettings.*.json
 
 # 报告导出与截图草稿不入库（终稿手动添加）
 docs/exports/
+.mimosa/
