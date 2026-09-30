@@ -1,0 +1,19 @@
+# 项目级代码规范（规划第二章）：统一编码与格式，IDE 与命令行检查一致
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+
+[*.{csproj,props,targets}]
+indent_size = 2
+
+[*.cs]
+# 命名：接口 I 前缀由框架默认规则覆盖；本仓库统一文件范围命名空间
+csharp_style_namespace_declarations = file_scoped:suggestion
+dotnet_style_qualification_for_field = false:suggestion
+# 桌面项目定向 Windows（消除 CA1416 平台告警噪音）
+dotnet_diagnostic.CA1416.severity = none

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.IO;
+using System.Text;
 using IndustrialRepair.DAL;
 using IndustrialRepair.Models;
 
@@ -12,6 +14,29 @@ public class DashboardService
     private readonly BasicRepository _basic = new();
 
     public List<DashboardRow> Rows() => _basic.GetDashboard();
+
+    /// <summary>
+    /// 大屏汇总数据导出为 CSV（规划：山海鲸等外部大屏先接导出的统计数据，
+    /// 课程提供数据库连接能力后可改实时数据源）。UTF-8 带 BOM，Excel/山海鲸均可直接打开。
+    /// </summary>
+    public string ExportCsv()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("类别,指标,数值");
+        foreach (var r in Rows())
+            sb.AppendLine($"{r.Kind},{Escape(r.Label)},{r.Val}");
+
+        var dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "IndustrialRepair", "export");
+        Directory.CreateDirectory(dir);
+        var file = Path.Combine(dir, $"dashboard_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
+        File.WriteAllText(file, sb.ToString(), new UTF8Encoding(true));
+        return file;
+    }
+
+    private static string Escape(string field) =>
+        field.Contains(',') || field.Contains('"') ? $"\"{field.Replace("\"", "\"\"")}\"" : field;
 
     /// <summary>顶部汇总：今日工单/待派单/维修中/已完成/本月材料成本</summary>
     public (int today, int pending, int working, int done, decimal monthCost) Summary()

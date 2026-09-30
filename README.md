@@ -125,5 +125,13 @@ IndustrialRepair/
 ## 已验证
 
 - `dotnet build`：0 错误 0 警告
-- `dotnet run --project test/SmokeConsole`：31/31 断言通过（认证/RBAC/工单/算料/出库/报表/大屏/串口解析/会话 + QRCoder↔ZXing 二维码回环 / OpenCV 原生库识别 / ClosedXML 导出 / MQTT 内嵌 Broker 收发）
+- `dotnet test tests/IndustrialRepair.Tests`：18/18（BOM 算料纯函数 12 项 / 口令哈希 3 项 / 扫码协议 6 项）
+- `dotnet run --project test/SmokeConsole`：35/35 断言通过（认证/RBAC/工单/算料/出库/报表/大屏/串口解析/会话 + QRCoder↔ZXing 二维码回环 / OpenCV 原生库识别 / ClosedXML 导出 / MQTT 内嵌 Broker 收发 / **C# 算料 ↔ 存储过程一致性**）
 - SQL 冒烟：`sqlcmd -i db/03_smoke_test.sql`（报修→派单→接单→算料→出库→完工→报表→自清理）
+
+## 架构约定（对照《项目级代码规范》，详见 docs/代码规范符合性说明.md）
+
+- **接口隔离**：`IImageRecognizer` 隔离识别引擎（课程模型到位后同接口替换，UI 零改动）；`IScannerInput` 隔离扫码源——真实串口（SerialScannerInput）/ 无硬件模拟器（SimulatedScannerInput）/ 图片扫码 / 手动录入共用同一条「编码→配件查询」流程
+- **BOM 纯函数**：`BomCalculator.Calculate`（decimal、Ceiling、可选最小领用量/步长）可独立单元测试；存储过程 `usp_GeneratePicking` 仍是事务写入权威路径，一致性由冒烟断言保证
+- **识别留痕**：拍照识别 Top3 候选随工单写入 `Recognized`，<60% 置信度明确标注「需人工确认」
+- **大屏数据源**：可视化大屏页「导出CSV」按钮产出 UTF-8 BOM 的统计数据，供山海鲸等外部大屏工具批量导入（课程提供数据库连接后可升级为实时源）

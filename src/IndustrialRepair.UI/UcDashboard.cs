@@ -24,8 +24,17 @@ internal class UcDashboard : UserControl, IRefreshable
 
     public UcDashboard()
     {
-        // ---- 汇总卡片 ----
+        // ---- 汇总卡片 + CSV 导出（山海鲸等外部大屏的数据源） ----
         var top = new Panel { Dock = DockStyle.Top, Height = 86, Padding = new Padding(6) };
+        var btnCsv = Ui.Btn("导出CSV\n(大屏数据源)", 0, 0, 118, 60);
+        btnCsv.Dock = DockStyle.Right;
+        btnCsv.Font = new Font("微软雅黑", 8.5F);
+        btnCsv.Click += (_, _) =>
+        {
+            try { Ui.Info($"大屏数据已导出：\n{new DashboardService().ExportCsv()}\n\n可直接作为山海鲸等大屏工具的数据源。"); }
+            catch (Exception ex) { Ui.Error("导出失败：" + ex.Message); }
+        };
+        top.Controls.Add(btnCsv);
         string[] names = { "今日工单", "待派单", "维修中", "已完成", "本月材料成本(元)" };
         for (int i = 0; i < 5; i++)
         {
