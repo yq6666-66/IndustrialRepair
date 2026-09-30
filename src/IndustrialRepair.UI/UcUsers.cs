@@ -52,24 +52,35 @@ internal class UcUsers : UserControl, IRefreshable
             if (_tabs.SelectedIndex == 0)
             {
                 var t = _users.ListUsers(null);
-                foreach (var c in new[] { "UserId", "UserName", "RealName", "Phone", "Email", "Status", "MfaEnabled", "LastLoginTime", "RoleName" })
+                // Status/MfaEnabled 是 BIT 布尔列，不能写入中文文本：先建字符串显示列，再移除布尔列
+                t.Columns.Add("状态显示", typeof(string));
+                t.Columns.Add("MFA显示", typeof(string));
+                foreach (System.Data.DataRow r in t.Rows)
+                {
+                    r["状态显示"] = r["Status"] is true ? "启用" : "禁用";
+                    r["MFA显示"] = r["MfaEnabled"] is true ? "开" : "关";
+                }
+                t.Columns.Remove("Status");
+                t.Columns.Remove("MfaEnabled");
+                t.Columns["状态显示"]!.SetOrdinal(5);
+                t.Columns["MFA显示"]!.SetOrdinal(6);
+                foreach (var c in new[] { "UserId", "UserName", "RealName", "Phone", "Email", "状态显示", "MFA显示", "LastLoginTime", "RoleName" })
                     if (t.Columns.Contains(c)) t.Columns[c]!.ColumnName = c switch
                     {
                         "UserId" => "ID", "UserName" => "用户名", "RealName" => "姓名", "Phone" => "手机",
-                        "Email" => "邮箱", "Status" => "状态", "MfaEnabled" => "MFA", "LastLoginTime" => "最后登录", _ => "角色"
+                        "Email" => "邮箱", "状态显示" => "状态", "MFA显示" => "MFA", "LastLoginTime" => "最后登录", _ => "角色"
                     };
-                foreach (System.Data.DataRow r in t.Rows)
-                {
-                    r["状态"] = (bool)r["状态"] ? "启用" : "禁用";
-                    r["MFA"] = (bool)r["MFA"] ? "开" : "关";
-                }
                 _gridUsers.DataSource = t;
             }
             else if (_tabs.SelectedIndex == 1)
             {
                 var t = _users.ListLoginLogs();
-                Rename(t, ("LoginLogId", "ID"), ("UserName", "用户名"), ("Success", "结果"), ("Message", "说明"), ("Ip", "IP"), ("LoginTime", "时间"));
-                foreach (System.Data.DataRow r in t.Rows) r["结果"] = (bool)r["结果"] ? "成功" : "失败";
+                // Success 是 BIT 布尔列，同样先建显示列再移除
+                t.Columns.Add("结果显示", typeof(string));
+                foreach (System.Data.DataRow r in t.Rows) r["结果显示"] = r["Success"] is true ? "成功" : "失败";
+                t.Columns.Remove("Success");
+                t.Columns["结果显示"]!.SetOrdinal(2);
+                Rename(t, ("LoginLogId", "ID"), ("UserName", "用户名"), ("结果显示", "结果"), ("Message", "说明"), ("Ip", "IP"), ("LoginTime", "时间"));
                 _gridLogin.DataSource = t;
             }
             else
