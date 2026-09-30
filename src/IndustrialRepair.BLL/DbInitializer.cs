@@ -260,6 +260,8 @@ SELECT
         var o1 = Create(0, "主轴运转异响，温度偏高", "机械", "Urgent", "疑似：深沟球轴承6205/骨架油封");
         _orders.Assign(o1, eng.UserId, eng.UserId);
         _orders.Take(o1, eng.UserId);
+        // M1：生成领料前必须完成材料审阅（演示播种直接走仓储/过程，不经服务层会话守卫）
+        _orders.ReviewMaterials(o1, MaterialReviewMode.BomOnly, null, null, "演示：按整机 BOM 配料", eng.UserId);
         var pid = _picking.Generate(o1, eng.UserName, 1.10m);
         _picking.Issue(pid, eng.UserName);
         _orders.Complete(o1, eng.UserId, "更换轴承与油封，运转恢复正常。");

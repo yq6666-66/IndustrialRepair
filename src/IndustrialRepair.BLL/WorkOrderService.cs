@@ -41,6 +41,7 @@ public class WorkOrderService
 
         string? savedPath = null;
         string? recognized = null;
+        string? recognizedJson = null;
         try
         {
             if (!string.IsNullOrWhiteSpace(photoSourcePath) && File.Exists(photoSourcePath))
@@ -53,8 +54,9 @@ public class WorkOrderService
                         ? $"自动识别：{best.PartName}({best.PartCode}) 置信度{best.Score}%"
                         : $"识别候选：{best.PartName}({best.PartCode}) 置信度{best.Score}%（低于60%需人工确认）")
                     + $"｜候选：{candText}";
+                recognizedJson = SerializeCandidates(top);
             }
-            var orderNo = _orders.Create(deviceId, reporterId, faultDesc.Trim(), faultType, priority, savedPath, recognized);
+            var orderNo = _orders.Create(deviceId, reporterId, faultDesc.Trim(), faultType, priority, savedPath, recognized, recognizedJson);
             return Result<string>.Ok(orderNo, $"报修成功，工单号 {orderNo}。");
         }
         catch (Exception ex)
@@ -119,6 +121,69 @@ public class WorkOrderService
         var order = Get(orderId);
         if (order == null) return Result.Fail("工单不存在。");
         return Guard.OrderOperator(order);
+    }
+
+    /*==================== 材料审阅（M1）====================*/
+
+    /// <summary>识别候选序列化为版本化 JSON 文档（work_order.RecognizedJson）</summary>
+    internal static string SerializeCandidates(IReadOnlyList<RecognizeResult> candidates) =>
+        System.Text.Json.JsonSerializer.Serialize(new RecognizedDocument
+        {
+            Version = 1,
+            Engine = "RecognitionEngineV2(ZXing+OpenCV)",
+            Candidates = candidates.ToList()
+        });
+
+    /// <summary>回读工单的结构化识别候选（无 JSON 或解析失败返回空表，旧工单兜底）</summary>
+    public List<RecognizeResult> GetCandidates(int orderId)
+    {
+        try
+        {
+            var json = Get(orderId)?.RecognizedJson;
+            if (string.IsNullOrWhiteSpace(json)) return new List<RecognizeResult>();
+            var doc = System.Text.Json.JsonSerializer.Deserialize<RecognizedDocument>(json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return doc?.Candidates ?? new List<RecognizeResult>();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            FileLog.Write($"工单 #{orderId} 的识别候选 JSON 解析失败，回退为空候选。");
+            return new List<RecognizeResult>();
+        }
+    }
+
+    /// <summary>
+    /// 材料审阅（工程师/管理员）：确认重点零件或选择仅整机 BOM。
+    /// 规则由 usp_ReviewMaterials 在事务内统一执行：
+    /// BOM 内确认仅标记重点；BOM 外补充件必须人工正用量+理由；BomOnly 必填理由；
+    /// 存在未出库领料单时禁止更改；审阅字段与留痕记录原子写入。
+    /// </summary>
+    public Result ReviewMaterials(MaterialReviewRequest request)
+    {
+        var guard = Guard.Session("order.handle");
+        if (!guard.Success) return guard;
+        var actor = AppSession.Current!;
+        var order = Get(request.OrderId);
+        if (order == null) return Result.Fail("工单不存在。");
+        guard = Guard.OrderOperator(order);
+        if (!guard.Success) return guard;
+
+        if (request.Mode == MaterialReviewMode.PartConfirmed)
+        {
+            if (request.PartId is not > 0) return Result.Fail("请选择要确认的零件。");
+            if (request.BaseQty is <= 0) return Result.Fail("人工基础用量必须为正数。");
+        }
+        else if (request.Mode != MaterialReviewMode.BomOnly)
+            return Result.Fail("审阅模式无效。");
+
+        try
+        {
+            _orders.ReviewMaterials(request.OrderId, request.Mode, request.PartId,
+                request.BaseQty, request.Note, actor.UserId);
+            return Result.Ok("材料审阅已保存。");
+        }
+        catch (SqlException ex) { return Result.Fail(DbHelper.FriendlyError(ex)); }
+        catch (Exception ex) { return Result.Fail(ex.Message); }
     }
 
     public DataTable Query(string? status, string? keyword, int? userId, bool onlyMine) =>

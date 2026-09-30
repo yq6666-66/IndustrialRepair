@@ -198,7 +198,94 @@ BEGIN
 END
 GO
 
--- 6. 智能算料：整机 BOM × 冗余系数生成领料单（事务 + 行锁 + applock 单号）
+-- 6a. 材料审阅：人工确认重点零件 / 仅整机 BOM（与审阅记录同一事务）
+--     规则：仅 Assigned/Working 工单可审阅；存在未出库领料单时禁止更改；
+--     BOM 内确认件不允许覆盖 BOM 用量；BOM 外补充件必须人工正用量+理由；BomOnly 必填理由。
+CREATE OR ALTER PROCEDURE dbo.usp_ReviewMaterials
+    @OrderId    INT,
+    @Mode       NVARCHAR(20),            -- PartConfirmed / BomOnly
+    @PartId     INT           = NULL,
+    @BaseQty    DECIMAL(10,2) = NULL,    -- 仅 BOM 外补充件：人工基础用量
+    @Note       NVARCHAR(200) = NULL,
+    @OperatorId INT           = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    BEGIN TRAN;
+    BEGIN TRY
+        IF @Mode NOT IN (N'PartConfirmed', N'BomOnly')
+            RAISERROR(N'审阅失败：审阅模式无效。', 16, 1);
+
+        DECLARE @St NVARCHAR(20), @DevId INT;
+        SELECT @St = Status, @DevId = DeviceId
+          FROM dbo.work_order WITH (UPDLOCK, HOLDLOCK)
+         WHERE OrderId = @OrderId;
+        IF @St IS NULL
+            RAISERROR(N'审阅失败：工单不存在。', 16, 1);
+        IF @St NOT IN (N'Assigned', N'Working')
+            RAISERROR(N'审阅失败：仅已派单/维修中的工单可审阅（完成/取消工单仅查看）。', 16, 1);
+
+        IF EXISTS(SELECT 1 FROM dbo.picking_list WHERE OrderId = @OrderId AND Status = N'Pending')
+            RAISERROR(N'审阅失败：该工单存在未出库领料单，不能更改审阅（避免已生成清单与确认结果不一致）。', 16, 1);
+
+        IF @Mode = N'PartConfirmed'
+        BEGIN
+            DECLARE @PStatus BIT, @InBom BIT = 0;
+            SELECT @PStatus = Status FROM dbo.part WHERE PartId = @PartId;
+            IF @PStatus IS NULL
+                RAISERROR(N'审阅失败：零件不存在。', 16, 1);
+            IF @PStatus = 0
+                RAISERROR(N'审阅失败：零件已停用，不能确认为维修重点。', 16, 1);
+
+            IF EXISTS(SELECT 1 FROM dbo.bom WHERE DeviceId = @DevId AND PartId = @PartId)
+            BEGIN
+                SET @InBom = 1;
+                IF @BaseQty IS NOT NULL
+                    RAISERROR(N'审阅失败：该零件属于设备 BOM，按 BOM 既有用量配料，不允许人工覆盖用量。', 16, 1);
+            END
+            ELSE IF (@BaseQty IS NULL OR @BaseQty <= 0)
+                RAISERROR(N'审阅失败：BOM 外补充件必须填写正的人工基础用量（用量为人工指定，非模型推算）。', 16, 1);
+
+            IF @InBom = 0 AND ISNULL(@Note, N'') = N''
+                RAISERROR(N'审阅失败：BOM 外补充件必须填写理由。', 16, 1);
+        END
+        ELSE IF ISNULL(@Note, N'') = N''
+            RAISERROR(N'审阅失败：选择“仅按整机 BOM 配料”必须填写理由。', 16, 1);
+
+        IF @Mode = N'BomOnly' SET @PartId = NULL;   -- BomOnly 不绑定零件
+
+        UPDATE dbo.work_order
+           SET MaterialReviewMode = @Mode,
+               ConfirmedPartId    = @PartId,
+               ConfirmedBaseQty   = @BaseQty,
+               ReviewNote         = @Note,
+               ReviewedBy         = @OperatorId,
+               ReviewedAt         = GETDATE()
+         WHERE OrderId = @OrderId;
+
+        -- 审阅留痕（触发器只记状态变化，审阅记录在此显式写入同一事务）
+        INSERT INTO dbo.work_order_record(OrderId, Action, OperatorId, Operator, Note)
+        SELECT @OrderId, N'Review', @OperatorId, ISNULL(u.UserName, N'-'),
+               N'材料审阅：' + CASE @Mode WHEN N'BomOnly' THEN N'仅按整机 BOM 配料'
+                                          ELSE N'确认重点零件 ' + ISNULL(p.PartName, N'#' + CAST(@PartId AS NVARCHAR(10))) END
+               + CASE WHEN @BaseQty IS NOT NULL THEN N'（人工用量 ' + CAST(@BaseQty AS NVARCHAR(12)) + N'）' ELSE N'' END
+               + CASE WHEN ISNULL(@Note, N'') <> N'' THEN N'；' + @Note ELSE N'' END
+          FROM (SELECT 1 AS x) t
+          LEFT JOIN dbo.sys_user u ON u.UserId = @OperatorId
+          LEFT JOIN dbo.part p ON p.PartId = @PartId;
+
+        COMMIT TRAN;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRAN;
+        THROW;
+    END CATCH
+END
+GO
+
+-- 6. 智能算料：整机 BOM × 冗余系数生成领料单（事务 + 行锁 + applock 单号 + 审阅闸门/快照）
+--    语义：整机 BOM 全量配料；已确认零件属 BOM 时仅标记 ★重点，不属于 BOM 时按人工用量×冗余追加。
 CREATE OR ALTER PROCEDURE dbo.usp_GeneratePicking
     @OrderId      INT,
     @Operator     NVARCHAR(30),
@@ -214,12 +301,15 @@ BEGIN
             RAISERROR(N'算料失败：冗余系数应在 1.00 ~ 2.00 之间。', 16, 1);
 
         -- 锁定工单行：同工单并发算料串行化（另一道防线为 UQ_picking_pending_per_order）
-        DECLARE @DevId INT;
-        SELECT @DevId = DeviceId
+        DECLARE @DevId INT, @RvMode NVARCHAR(20), @CPart INT, @CQty DECIMAL(10,2), @RNote NVARCHAR(200);
+        SELECT @DevId = DeviceId, @RvMode = MaterialReviewMode, @CPart = ConfirmedPartId,
+               @CQty = ConfirmedBaseQty, @RNote = ReviewNote
           FROM dbo.work_order WITH (UPDLOCK, HOLDLOCK)
          WHERE OrderId = @OrderId AND Status IN (N'Assigned', N'Working');
         IF @DevId IS NULL
             RAISERROR(N'算料失败：仅已派单/维修中的工单可生成领料单。', 16, 1);
+        IF @RvMode IS NULL
+            RAISERROR(N'算料失败：请先完成材料审阅（在工单详情确认重点零件，或选择“仅按整机 BOM 配料”）。', 16, 1);
 
         IF EXISTS(SELECT 1 FROM dbo.picking_list WHERE OrderId = @OrderId AND Status = N'Pending')
             RAISERROR(N'算料失败：该工单已存在未出库的领料单。', 16, 1);
@@ -235,8 +325,12 @@ BEGIN
          WHERE CONVERT(NVARCHAR(8), CreatedAt, 112) = CONVERT(NVARCHAR(8), GETDATE(), 112);
         SET @No = N'PK' + CONVERT(NVARCHAR(8), GETDATE(), 112) + RIGHT(N'000' + CAST(@Seq AS NVARCHAR(10)), 4);
 
-        INSERT INTO dbo.picking_list(PickingNo, OrderId, GeneratedBy, Redundancy)
-        VALUES(@No, @OrderId, @Operator, @Redundancy);
+        INSERT INTO dbo.picking_list(PickingNo, OrderId, GeneratedBy, Redundancy, ReviewSnapshot)
+        VALUES(@No, @OrderId, @Operator, @Redundancy,
+               (SELECT @RvMode AS mode, ISNULL(p.PartCode, N'') AS partCode, ISNULL(p.PartName, N'') AS partName,
+                       @CQty AS baseQty, @Redundancy AS redundancy, ISNULL(@RNote, N'') AS note
+                  FROM (SELECT 1 AS x) t2 LEFT JOIN dbo.part p ON p.PartId = @CPart
+                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER));
         SET @NewPickingId = SCOPE_IDENTITY();
 
         -- 整机 BOM 用量 × 冗余系数 → 向上取整 → 生成明细
@@ -251,6 +345,22 @@ BEGIN
 
         IF NOT EXISTS(SELECT 1 FROM dbo.picking_item WHERE PickingId = @NewPickingId)
             RAISERROR(N'算料失败：该设备未维护 BOM，无法推算材料。', 16, 1);
+
+        -- 材料审阅落料：BOM 内确认件仅标记 ★重点（数量仍按 BOM）；
+        -- BOM 外补充件按人工用量×冗余追加一行，备注标明人工来源
+        IF @RvMode = N'PartConfirmed'
+        BEGIN
+            IF EXISTS(SELECT 1 FROM dbo.picking_item WHERE PickingId = @NewPickingId AND PartId = @CPart)
+                UPDATE dbo.picking_item
+                   SET Remark = Remark + N'｜★重点(人工确认)'
+                 WHERE PickingId = @NewPickingId AND PartId = @CPart;
+            ELSE
+                INSERT INTO dbo.picking_item(PickingId, PartId, PartCode, PartName, Qty, UnitPrice, Remark)
+                SELECT @NewPickingId, p.PartId, p.PartCode, p.PartName,
+                       CEILING(@CQty * @Redundancy), p.Price,
+                       N'BOM外补充件(人工用量' + CAST(@CQty AS NVARCHAR(12)) + N'×冗余' + CAST(@Redundancy AS NVARCHAR(6)) + N')'
+                FROM dbo.part p WHERE p.PartId = @CPart;
+        END
 
         UPDATE dbo.picking_list
            SET TotalAmount = (SELECT ISNULL(SUM(Amount), 0) FROM dbo.picking_item WHERE PickingId = @NewPickingId)
@@ -378,14 +488,19 @@ GO
 CREATE OR ALTER VIEW dbo.vw_WorkOrder_Full
 AS
 SELECT o.OrderId, o.OrderNo, o.Status, o.Priority, o.FaultType, o.FaultDesc,
-       o.PhotoPath, o.Recognized, o.CreatedAt, o.AssignTime, o.StartTime, o.FinishTime, o.RepairSummary,
+       o.PhotoPath, o.Recognized, o.RecognizedJson, o.CreatedAt, o.AssignTime, o.StartTime, o.FinishTime, o.RepairSummary,
        o.ReporterId, o.EngineerId,
+       o.MaterialReviewMode, o.ConfirmedPartId, o.ConfirmedBaseQty, o.ReviewNote, o.ReviewedBy, o.ReviewedAt,
+       cp.PartName AS ConfirmedPartName, cp.PartCode AS ConfirmedPartCode,
+       rv.RealName AS ReviewedByName,
        d.DeviceCode, d.DeviceName, d.DeviceId,
        rp.RealName AS ReporterName, eg.RealName AS EngineerName
 FROM dbo.work_order o
 JOIN dbo.device d ON d.DeviceId = o.DeviceId
 JOIN dbo.sys_user rp ON rp.UserId = o.ReporterId
-LEFT JOIN dbo.sys_user eg ON eg.UserId = o.EngineerId;
+LEFT JOIN dbo.sys_user eg ON eg.UserId = o.EngineerId
+LEFT JOIN dbo.part cp ON cp.PartId = o.ConfirmedPartId
+LEFT JOIN dbo.sys_user rv ON rv.UserId = o.ReviewedBy;
 GO
 
 CREATE OR ALTER VIEW dbo.vw_RepairReport

@@ -15,9 +15,24 @@
 IF COL_LENGTH(N'dbo.work_order', N'RecognizedJson') IS NULL
     ALTER TABLE dbo.work_order ADD RecognizedJson NVARCHAR(MAX) NULL;
 
+-- 旧列宽 10 装不下 PartConfirmed(13)：先摘依赖约束再扩宽到 20
+IF COL_LENGTH(N'dbo.work_order', N'MaterialReviewMode') IS NOT NULL
+   AND COL_LENGTH(N'dbo.work_order', N'MaterialReviewMode') < 40
+BEGIN
+    IF OBJECT_ID(N'dbo.CK_work_order_reviewmode') IS NOT NULL
+        ALTER TABLE dbo.work_order DROP CONSTRAINT CK_work_order_reviewmode;
+    IF OBJECT_ID(N'dbo.CK_work_order_reviewpart') IS NOT NULL
+        ALTER TABLE dbo.work_order DROP CONSTRAINT CK_work_order_reviewpart;
+    IF OBJECT_ID(N'dbo.CK_work_order_reviewqty') IS NOT NULL
+        ALTER TABLE dbo.work_order DROP CONSTRAINT CK_work_order_reviewqty;
+    IF OBJECT_ID(N'dbo.CK_work_order_reviewnote') IS NOT NULL
+        ALTER TABLE dbo.work_order DROP CONSTRAINT CK_work_order_reviewnote;
+    ALTER TABLE dbo.work_order ALTER COLUMN MaterialReviewMode NVARCHAR(20) NULL;
+END;
+
 IF COL_LENGTH(N'dbo.work_order', N'MaterialReviewMode') IS NULL
     ALTER TABLE dbo.work_order ADD
-        MaterialReviewMode NVARCHAR(10)  NULL,   -- PartConfirmed / BomOnly
+        MaterialReviewMode NVARCHAR(20)  NULL,   -- PartConfirmed / BomOnly
         ConfirmedPartId   INT            NULL,
         ConfirmedBaseQty  DECIMAL(10,2)  NULL,   -- BOM 外补充件的人工基础用量（BOM 内为 NULL）
         ReviewNote        NVARCHAR(200)  NULL,

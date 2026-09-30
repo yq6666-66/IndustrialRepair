@@ -132,8 +132,9 @@ internal class UcWorkOrders : UserControl, IRefreshable
         if (id == 0) { Ui.Error("请先选择工单。"); return; }
         var order = _svc.Get(id);
         if (order == null) { Ui.Error("工单不存在。"); return; }
-        using var dlg = new FOrderDetail(order, _svc.Records(id));
+        using var dlg = new FOrderDetail(id, _user);
         dlg.ShowDialog();
+        RefreshData();
     }
 }
 
@@ -256,40 +257,163 @@ internal class FReportDialog : UIForm
 /// <summary>工单详情：信息 + 照片 + 流转记录</summary>
 internal class FOrderDetail : UIForm
 {
-    public FOrderDetail(WorkOrder o, List<WorkOrderRecord> records)
+    private readonly WorkOrderService _svc = new();
+    private readonly PartService _parts = new();
+    private readonly UserInfo _user;
+    private int _orderId;
+    private readonly UILabel _info = new()
     {
-        Text = $"工单详情 {o.OrderNo}";
-        ClientSize = new Size(720, 470);
+        Location = new Point(16, 14), Size = new Size(460, 196), AutoSize = false,
+        Font = new Font("微软雅黑", 9F)
+    };
+    private readonly UILabel _lblReview = new()
+    {
+        Location = new Point(16, 214), Size = new Size(680, 22), AutoSize = false,
+        Font = new Font("微软雅黑", 9F, FontStyle.Bold), ForeColor = Color.FromArgb(0, 122, 204)
+    };
+    private readonly Panel _reviewActions = new() { Location = new Point(14, 240), Size = new Size(690, 92) };
+    private readonly PictureBox _photo = new()
+    {
+        Location = new Point(496, 14), Size = new Size(196, 140), SizeMode = PictureBoxSizeMode.Zoom,
+        BackColor = Color.FromArgb(240, 240, 240), BorderStyle = BorderStyle.FixedSingle
+    };
+    private readonly UIDataGridView _grid = Ui.Grid(16, 340, 680, 170);
+
+    /// <summary>工单详情：信息/照片/识别候选/材料审阅/流转记录（工程师可在此人工确认零件）</summary>
+    public FOrderDetail(int orderId, UserInfo user)
+    {
+        _user = user;
+        _orderId = orderId;
+        Text = $"工单详情 #{orderId}";
+        ClientSize = new Size(716, 552);
         StartPosition = FormStartPosition.CenterParent;
 
-        var info = new UILabel
-        {
-            Location = new Point(16, 16), Size = new Size(460, 210), AutoSize = false,
-            Text = $"工单号：{o.OrderNo}\n设备：{o.DeviceCode} {o.DeviceName}\n" +
-                   $"状态：{OrderStatusCode.ToChinese(o.Status)}   优先级：{PriorityCode.ToChinese(o.Priority)}\n" +
-                   $"报修人：{o.ReporterName}   工程师：{o.EngineerName ?? "-"}\n" +
-                   $"报修时间：{o.CreatedAt:yyyy-MM-dd HH:mm}\n" +
-                   $"接单：{o.StartTime:yyyy-MM-dd HH:mm}   完工：{o.FinishTime:yyyy-MM-dd HH:mm}\n" +
-                   $"故障描述：{o.FaultDesc}\n识别结果：{o.Recognized ?? "-"}\n维修总结：{o.RepairSummary ?? "-"}",
-            Font = new Font("微软雅黑", 9F)
-        };
-        Control photoHost = o.PhotoPath != null && File.Exists(o.PhotoPath)
-            ? new PictureBox { Image = Image.FromFile(o.PhotoPath), Location = new Point(500, 16), Size = new Size(190, 150), SizeMode = PictureBoxSizeMode.Zoom }
-            : new UILabel { Text = "无照片", Location = new Point(500, 60), Size = new Size(190, 30), TextAlign = ContentAlignment.MiddleCenter };
+        var close = Ui.Btn("关闭", 300, 520, 100, 30, (_, _) => Close());
+        Controls.AddRange(new Control[] { _info, _photo, _lblReview, _reviewActions, _grid, close });
+        Reload(orderId);
+    }
 
-        var grid = Ui.Grid(16, 240, 680, 200);
+    private void Reload(int orderId)
+    {
+        var o = _svc.Get(orderId);
+        if (o == null) { Ui.Error("工单不存在。"); Close(); return; }
+
+        _info.Text =
+            $"工单号：{o.OrderNo}    设备：{o.DeviceCode} {o.DeviceName}\n" +
+            $"状态：{OrderStatusCode.ToChinese(o.Status)}    优先级：{PriorityCode.ToChinese(o.Priority)}    " +
+            $"报修人：{o.ReporterName}    工程师：{o.EngineerName ?? "-"}\n" +
+            $"报修：{o.CreatedAt:MM-dd HH:mm}    接单：{(o.StartTime == null ? "-" : o.StartTime.Value.ToString("MM-dd HH:mm"))}    " +
+            $"完工：{(o.FinishTime == null ? "-" : o.FinishTime.Value.ToString("MM-dd HH:mm"))}\n" +
+            $"故障描述：{o.FaultDesc}\n识别结果：{o.Recognized ?? "-"}\n维修总结：{o.RepairSummary ?? "-"}";
+
+        _photo.Image?.Dispose();
+        _photo.Image = o.PhotoPath != null && File.Exists(o.PhotoPath) ? Image.FromFile(o.PhotoPath) : null;
+
+        _lblReview.Text = o.MaterialReviewMode == null
+            ? "材料审阅：未审阅（生成领料单前需确认重点零件或选择仅整机BOM）"
+            : o.MaterialReviewMode == MaterialReviewMode.BomOnly
+                ? $"材料审阅：仅整机BOM —— {o.ReviewNote}（{o.ReviewedByName} {o.ReviewedAt:MM-dd HH:mm}）"
+                : $"材料审阅：确认重点 {o.ConfirmedPartName}" +
+                  (o.ConfirmedBaseQty == null ? "" : $"（BOM外人工用量 {o.ConfirmedBaseQty}）") +
+                  $" —— {o.ReviewNote}（{o.ReviewedByName} {o.ReviewedAt:MM-dd HH:mm}）";
+
+        BuildReviewActions(o);
+
+        Text = $"工单详情 {o.OrderNo}";
         var t = new System.Data.DataTable();
         t.Columns.Add("时间", typeof(string));
         t.Columns.Add("动作", typeof(string));
         t.Columns.Add("操作人", typeof(string));
         t.Columns.Add("备注", typeof(string));
-        foreach (var r in records)
+        foreach (var r in _svc.Records(orderId))
             t.Rows.Add(r.CreatedAt.ToString("MM-dd HH:mm:ss"), WorkOrderRecord.ToChinese(r.Action), r.Operator, r.Note);
-        grid.DataSource = t;
+        _grid.DataSource = t;
+    }
 
-        var close = Ui.Btn("关闭", 300, 446 % 470 - 28, 100, 30, (_, _) => Close());
-        close.Location = new Point(300, 440);
+    /// <summary>构建审阅操作区：候选确认按钮 + 手动选件 + 仅整机BOM（需 order.handle 且工单可审阅）</summary>
+    private void BuildReviewActions(WorkOrder o)
+    {
+        _reviewActions.Controls.Clear();
+        bool canReview = _user.HasPerm("order.handle") && o.Status is "Assigned" or "Working";
+        if (!canReview)
+        {
+            _reviewActions.Controls.Add(new UILabel
+            {
+                Text = o.Status is "Done" or "Cancelled" ? "工单已结束，仅可查看审阅结果。" : "当前角色仅可查看（材料审阅需维修处理权限）。",
+                Location = new Point(2, 6), AutoSize = true, Font = new Font("微软雅黑", 9F),
+                ForeColor = Color.Gray
+            });
+            return;
+        }
 
-        Controls.AddRange(new Control[] { info, photoHost, grid, close });
+        int x = 2;
+        var head = new UILabel
+        {
+            Text = "材料审阅操作：", AutoSize = true, Location = new Point(2, 8),
+            Font = new Font("微软雅黑", 9F, FontStyle.Bold)
+        };
+        _reviewActions.Controls.Add(head);
+        x += 100;
+
+        foreach (var cand in _svc.GetCandidates(o.OrderId))
+        {
+            if (cand.PartId <= 0) continue;   // 无效占位候选不生成按钮
+            var b = Ui.Btn($"确认：{cand.PartName} {cand.Score}%", x, 2, 168, 30, (_, _) => ConfirmPart(cand.PartId, cand.PartName));
+            if (cand.Score < 60) b.Font = new Font("微软雅黑", 9F, FontStyle.Bold);
+            _reviewActions.Controls.Add(b);
+            x += 176;
+        }
+
+        var manual = Ui.Btn("手动选择零件…", 2, 38, 130, 30, (_, _) => ManualPick());
+        var bomOnly = Ui.Btn("仅按整机BOM配料…", 140, 38, 150, 30, (_, _) => PickBomOnly());
+        var tip = new UILabel
+        {
+            Text = "候选来自拍照识别；低分候选需人工核对。BOM 内确认仅标记重点，BOM 外需填人工用量。",
+            AutoSize = true, Location = new Point(300, 44), Font = new Font("微软雅黑", 8F), ForeColor = Color.Gray
+        };
+        _reviewActions.Controls.AddRange(new Control[] { manual, bomOnly, tip });
+    }
+
+    /// <summary>确认重点零件：BOM 内仅标记；BOM 外先提示必须人工用量+理由（两步引导）</summary>
+    private void ConfirmPart(int partId, string partName)
+    {
+        var note = Ui.Input($"确认“{partName}”为维修重点。\n审阅理由（BOM 外补充件必填，BOM 内可留空）：", "理由：");
+        if (note == null) return;
+        var r = _svc.ReviewMaterials(new MaterialReviewRequest(_orderId, MaterialReviewMode.PartConfirmed, partId, null, note));
+        if (!r.Success && r.Message.Contains("人工基础用量"))
+        {
+            var qtyText = Ui.Input($"“{partName}”不在该设备 BOM 中，属 BOM 外补充件。\n请填写人工基础用量（正数，如 1.5）：", "用量：");
+            if (qtyText == null || !decimal.TryParse(qtyText.Trim(), out var qty) || qty <= 0)
+            { Ui.Error("用量必须为正数（如 1.5）。"); return; }
+            r = _svc.ReviewMaterials(new MaterialReviewRequest(_orderId, MaterialReviewMode.PartConfirmed, partId, qty, note));
+        }
+        if (r.Success) { Ui.Info(r.Message); Reload(_orderId); }
+        else Ui.Error(r.Message);
+    }
+
+    private void ManualPick()
+    {
+        var key = Ui.Input("输入配件编码或名称关键字：", "关键字：");
+        if (string.IsNullOrWhiteSpace(key)) return;
+        var hits = _parts.Search(key.Trim());
+        if (hits.Count == 0) { Ui.Error("未找到匹配配件。"); return; }
+        if (hits.Count > 1)
+        {
+            var list = string.Join("\n", hits.Take(6).Select((p, i) => $"{i + 1}. {p.PartCode} {p.PartName}"));
+            var pick = Ui.Input($"匹配 {hits.Count} 项，请输入编号（1-{Math.Min(6, hits.Count)}）：\n{list}", "编号：");
+            if (!int.TryParse(pick, out var idx) || idx < 1 || idx > Math.Min(6, hits.Count)) { Ui.Error("编号无效。"); return; }
+            ConfirmPart(hits[idx - 1].PartId, hits[idx - 1].PartName);
+            return;
+        }
+        ConfirmPart(hits[0].PartId, hits[0].PartName);
+    }
+
+    private void PickBomOnly()
+    {
+        var note = Ui.Input("选择“仅按整机 BOM 配料”。\n请填写理由（无照片/IoT/历史工单适用）：", "理由：");
+        if (note == null) return;
+        var r = _svc.ReviewMaterials(new MaterialReviewRequest(_orderId, MaterialReviewMode.BomOnly, null, null, note));
+        if (r.Success) { Ui.Info(r.Message); Reload(_orderId); }
+        else Ui.Error(r.Message);
     }
 }

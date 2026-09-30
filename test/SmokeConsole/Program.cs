@@ -130,9 +130,27 @@ var orderSvc = new WorkOrderService();
 var devices = orderSvc.Devices();
 Check("设备台账加载", devices.Count > 0);
 var reporter = rep.Data!;
-var report = orderSvc.Report(devices[6].DeviceId, reporter.UserId, "冒烟：输送带异响", "机械", PriorityCode.Normal, null);
-Check("创建报修工单", report.Success, report.Message);
+
+// 报修用的现场照片 + 识别候选（候选由界面预览传入，报修不再重复识别）
+var testImg = Path.Combine(Path.GetTempPath(), "smoke_part.png");
+using (var bmp = new System.Drawing.Bitmap(300, 300))
+{
+    using var g = System.Drawing.Graphics.FromImage(bmp);
+    g.Clear(System.Drawing.Color.FromArgb(235, 235, 238));
+    using var brush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(125, 125, 130));
+    g.FillEllipse(brush, 60, 60, 180, 180);
+    bmp.Save(testImg, System.Drawing.Imaging.ImageFormat.Png);
+}
+var fakeCandidates = new List<RecognizeResult>
+{
+    new() { PartId = 1, PartCode = "P-ZC-001", PartName = "深沟球轴承6205", Score = 88, Reason = "smoke:top1" },
+    new() { PartId = 4, PartCode = "P-MF-001", PartName = "骨架油封TC40x62x8", Score = 76, Reason = "smoke:top2" }
+};
+var report = orderSvc.Report(devices[6].DeviceId, reporter.UserId, "冒烟：输送带异响", "机械", PriorityCode.Normal, testImg, fakeCandidates);
+Check("创建报修工单（带照片与候选）", report.Success, report.Message);
 int orderId = int.Parse(report.Data!);
+Check("识别候选 JSON 落库并回读（Top2）", orderSvc.GetCandidates(orderId).Count == 2,
+      $"回读 {orderSvc.GetCandidates(orderId).Count} 项");
 
 // 3.1 越权校验：reporter 无 order.assign，派单必须被拒（服务层守卫）
 var denied = orderSvc.Assign(orderId, 5, reporter.UserId);
@@ -163,16 +181,36 @@ int recAfter = orderSvc.Records(orderId).Count;
 Check("非状态更新不产生流转记录", recAfter == recBefore, $"更新前后 {recBefore}→{recAfter}");
 Check("Create 流转记录仅一条", orderSvc.Records(orderId).Count(r => r.Action == "Create") == 1);
 
-Console.WriteLine("== 4. 智能算料与领料出库（工程师会话） ==");
+Console.WriteLine("== 4. 材料审阅与智能算料（M1 全场景） ==");
 var pick = new PickingService();
+var bomT = DbHelper.GetTable("SELECT PartId, QtyPer FROM dbo.bom WHERE DeviceId=@D",
+    CommandType.Text, DbHelper.P("@D", devices[6].DeviceId));
+var partInBom = (int)bomT.Rows[0]["PartId"];
+var partNotInBom = Convert.ToInt32(DbHelper.ExecuteScalar(
+    "SELECT TOP 1 p.PartId FROM dbo.part p WHERE p.Status = 1 AND NOT EXISTS(SELECT 1 FROM dbo.bom b WHERE b.DeviceId = @D AND b.PartId = p.PartId)",
+    CommandType.Text, DbHelper.P("@D", devices[6].DeviceId))!);
 
-// 4.1 越权：工程师对未获派工单算料被拒（另建一张待派单，不派给他）
-var engReport = orderSvc.Report(devices[7].DeviceId, engUser.UserId, "冒烟：工程师代报（未派）", "机械", PriorityCode.Normal, null);
-var deniedGen = int.TryParse(engReport.Data, out var otherOrderId)
+// 4.1 未审阅直接算料被拒
+var noReview = pick.Generate(orderId, engUser.UserName, 1.10m);
+Check("未审阅生成领料被拒", !noReview.Success && noReview.Message.Contains("审阅"), noReview.Message);
+
+// 4.2 reporter 无权审阅（服务层权限守卫）
+auth.Login("reporter", "123456");
+var deniedReview = orderSvc.ReviewMaterials(new MaterialReviewRequest(orderId, MaterialReviewMode.BomOnly, null, null, "越权尝试"));
+Check("reporter 材料审阅被拒(权限)", !deniedReview.Success, deniedReview.Message);
+
+// 4.3 工程师对未获派工单算料被拒（管理员代建一张不派给他）
+auth.Login("admin", "123456");
+var adminReport = orderSvc.Report(devices[7].DeviceId, AppSession.Current!.UserId, "冒烟：管理员代报（未派）", "机械", PriorityCode.Normal, null);
+auth.Login("engineer", "123456");
+var deniedGen = int.TryParse(adminReport.Data, out var otherOrderId)
     ? pick.Generate(otherOrderId, engUser.UserName, 1.10m)
-    : Result<int>.Fail(engReport.Message);
-Check("工程师对未获派工单算料被拒", !deniedGen.Success, deniedGen.Message);
+    : Result<int>.Fail(adminReport.Message);
+Check("工程师对未获派工单算料被拒", !deniedGen.Success && deniedGen.Message.Contains("获派"), deniedGen.Message);
 
+// 4.4 BomOnly 审阅 → 整机 BOM 生成
+var rvBom = orderSvc.ReviewMaterials(new MaterialReviewRequest(orderId, MaterialReviewMode.BomOnly, null, null, "冒烟：整机 BOM 即可"));
+Check("BomOnly 材料审阅", rvBom.Success, rvBom.Message);
 var gen = pick.Generate(orderId, engUser.UserName, 1.10m);
 Check("BOM×1.10 生成领料单", gen.Success, gen.Message);
 if (gen.Success)
@@ -182,17 +220,23 @@ if (gen.Success)
     Check("领料明细非空", items.Count > 0, $"共 {items.Count} 项");
     Console.WriteLine("   明细：" + string.Join("；", items.Select(i => $"{i.PartName}×{i.Qty}={i.Amount:F2}")));
 
-    // C# 算料纯函数 ↔ 存储过程 一致性
-    var bomT = DbHelper.GetTable("SELECT PartId, QtyPer FROM dbo.bom WHERE DeviceId=@D",
-        CommandType.Text, DbHelper.P("@D", devices[6].DeviceId));
+    // C# 算料纯函数 ↔ 存储过程 一致性（整机 BOM 语义）
     var expected = BomCalculator.Calculate(
         bomT.AsEnumerable().Select(r => new BomRule((int)r["PartId"], (decimal)r["QtyPer"])), 1.10m);
     var actualQty = items.GroupBy(i => i.PartId).ToDictionary(g => g.Key, g => g.Sum(x => x.Qty));
     bool parity = expected.Count == actualQty.Count &&
                   expected.All(e => actualQty.TryGetValue(e.PartId, out var q) && q == (int)e.Qty);
-    Check("C#算料与存储过程数量一致", parity, $"BOM {expected.Count} 项");
+    Check("C#算料与存储过程数量一致(整机BOM)", parity, $"BOM {expected.Count} 项");
 
-    // 4.2 并发出库：两个线程同单出库，只允许一次成功
+    var snap = DbHelper.ExecuteScalar("SELECT ReviewSnapshot FROM dbo.picking_list WHERE PickingId=@Id",
+        CommandType.Text, DbHelper.P("@Id", gen.Data))?.ToString();
+    Check("领料单保存审阅快照", !string.IsNullOrEmpty(snap) && snap.Contains("BomOnly"), snap ?? "");
+
+    // 4.5 Pending 单存在时禁止更改审阅
+    var lockRv = orderSvc.ReviewMaterials(new MaterialReviewRequest(orderId, MaterialReviewMode.BomOnly, null, null, "尝试更改"));
+    Check("存在未出库单时禁止更改审阅", !lockRv.Success && lockRv.Message.Contains("未出库"), lockRv.Message);
+
+    // 4.6 并发出库：两个线程同单出库，只允许一次成功
     auth.Login("warehouse", "123456");
     var whUser = AppSession.Current!;
     var t1 = Task.Run(() => pick.Issue(gen.Data, whUser.UserName));
@@ -203,6 +247,33 @@ if (gen.Success)
     Check("出库后状态为 Issued", pick.List(null, null).AsEnumerable()
         .Any(r => Convert.ToInt32(r["PickingId"]) == gen.Data && r["Status"].ToString() == "Issued"));
 }
+
+// 4.7 出库后改审阅：BOM 内确认 → 该行 ★重点标记（数量仍按 BOM）
+auth.Login("engineer", "123456");
+var rvIn = orderSvc.ReviewMaterials(new MaterialReviewRequest(orderId, MaterialReviewMode.PartConfirmed, partInBom, null, "确认重点（BOM内）"));
+Check("BOM内重点审阅", rvIn.Success, rvIn.Message);
+auth.Login("warehouse", "123456");
+var gen2 = pick.Generate(orderId, AppSession.Current!.UserName, 1.10m);
+Check("二单生成(BOM内★重点)", gen2.Success, gen2.Message);
+var starItem = gen2.Success ? pick.Items(gen2.Data).FirstOrDefault(i => i.PartId == partInBom) : null;
+Check("BOM内确认行带★重点标记", starItem != null && (starItem.Remark ?? "").Contains("★"), starItem?.Remark ?? "（行不存在）");
+Check("二单出库", pick.Issue(gen2.Data, AppSession.Current!.UserName).Success);
+
+// 4.8 BOM 外补充件：缺用量被拒 → 人工用量按冗余追加
+auth.Login("engineer", "123456");
+var noQty = orderSvc.ReviewMaterials(new MaterialReviewRequest(orderId, MaterialReviewMode.PartConfirmed, partNotInBom, null, "BOM外缺用量"));
+Check("BOM外缺人工用量被拒", !noQty.Success && noQty.Message.Contains("人工基础用量"), noQty.Message);
+var rvOut = orderSvc.ReviewMaterials(new MaterialReviewRequest(orderId, MaterialReviewMode.PartConfirmed, partNotInBom, 1.5m, "现场追加补充件"));
+Check("BOM外人工用量审阅", rvOut.Success, rvOut.Message);
+auth.Login("warehouse", "123456");
+var gen3 = pick.Generate(orderId, AppSession.Current!.UserName, 1.10m);
+Check("三单生成(BOM外追加)", gen3.Success, gen3.Message);
+var extra = gen3.Success ? pick.Items(gen3.Data).FirstOrDefault(i => i.PartId == partNotInBom) : null;
+Check("BOM外追加行 Qty=CEILING(1.5×1.10)=2", extra != null && extra.Qty == 2 && (extra.Remark ?? "").Contains("BOM外"),
+      $"Qty={extra?.Qty.ToString() ?? "缺失"} {extra?.Remark}");
+
+// 4.9 审阅留痕
+Check("审阅流转记录≥3条(Review)", orderSvc.Records(orderId).Count(r => r.Action == "Review") >= 3);
 
 Console.WriteLine("== 5. 完工与报表/大屏（工程师会话） ==");
 auth.Login("engineer", "123456");
@@ -235,16 +306,7 @@ var decoded = BarcodeUtil.Decode(qrFile);
 Check("ZXing 解码回环命中", decoded == "PART:P-ZC-001", $"解码结果：{decoded}");
 Check("扫码内容提取配件编码", BarcodeUtil.ExtractPartCode(decoded) == "P-ZC-001");
 
-// 9.2 OpenCV 识别引擎 V2（生成测试图：灰色圆形零件照片）
-var testImg = Path.Combine(Path.GetTempPath(), "smoke_part.png");
-using (var bmp = new System.Drawing.Bitmap(300, 300))
-{
-    using var g = System.Drawing.Graphics.FromImage(bmp);
-    g.Clear(System.Drawing.Color.FromArgb(235, 235, 238));
-    using var brush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(125, 125, 130));
-    g.FillEllipse(brush, 60, 60, 180, 180);
-    bmp.Save(testImg, System.Drawing.Imaging.ImageFormat.Png);
-}
+// 9.2 OpenCV 识别引擎 V2（复用第 3 节生成的灰色圆形零件测试图）
 var recResults = new RecognitionEngine().Recognize(testImg);
 Check("识别引擎V2 返回候选", recResults.Count > 0 && recResults[0].Score > 0,
       $"Top1 {recResults[0].PartName} {recResults[0].Score}%：{recResults[0].Reason}");

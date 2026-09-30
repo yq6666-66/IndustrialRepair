@@ -9,18 +9,30 @@ namespace IndustrialRepair.DAL;
 /// <summary>工单（存储过程流转 + 视图查询）</summary>
 public class WorkOrderRepository
 {
-    /// <summary>创建报修工单（usp_CreateOrder），返回新工单号</summary>
+    /// <summary>创建报修工单（usp_CreateOrder），返回新工单号；recognizedJson 为结构化识别候选</summary>
     public string Create(int deviceId, int reporterId, string faultDesc, string? faultType,
-                         string priority, string? photoPath, string? recognized)
+                         string priority, string? photoPath, string? recognized, string? recognizedJson = null)
     {
         var outVals = new Dictionary<string, object?>();
         DbHelper.ExecProc("dbo.usp_CreateOrder", new Dictionary<string, object?>
         {
             ["@DeviceId"] = deviceId, ["@ReporterId"] = reporterId, ["@FaultDesc"] = faultDesc,
             ["@FaultType"] = faultType, ["@Priority"] = priority,
-            ["@PhotoPath"] = photoPath, ["@Recognized"] = recognized
+            ["@PhotoPath"] = photoPath, ["@Recognized"] = recognized, ["@RecognizedJson"] = recognizedJson
         }, new Dictionary<string, SqlDbType> { ["@NewOrderId"] = SqlDbType.Int }, out outVals);
         return Convert.ToInt32(outVals["@NewOrderId"]).ToString();
+    }
+
+    /// <summary>材料审阅（usp_ReviewMaterials）：审阅字段与留痕记录同一事务写入</summary>
+    public void ReviewMaterials(int orderId, string mode, int? partId, decimal? baseQty,
+                                string? note, int operatorId)
+    {
+        var outs = new Dictionary<string, object?>();
+        DbHelper.ExecProc("dbo.usp_ReviewMaterials", new Dictionary<string, object?>
+        {
+            ["@OrderId"] = orderId, ["@Mode"] = mode, ["@PartId"] = partId,
+            ["@BaseQty"] = baseQty, ["@Note"] = note, ["@OperatorId"] = operatorId
+        }, null, out outs);
     }
 
     public void Assign(int orderId, int engineerId, int operatorId)
@@ -73,7 +85,10 @@ public class WorkOrderRepository
     {
         var t = DbHelper.GetTable(
             @"SELECT OrderId,OrderNo,Status,Priority,FaultType,FaultDesc,DeviceId,DeviceCode,DeviceName,
-                     ReporterId,EngineerId,ReporterName,EngineerName,CreatedAt,AssignTime,StartTime,FinishTime,PhotoPath,Recognized,RepairSummary
+                     ReporterId,EngineerId,ReporterName,EngineerName,CreatedAt,AssignTime,StartTime,FinishTime,
+                     PhotoPath,Recognized,RecognizedJson,RepairSummary,
+                     MaterialReviewMode,ConfirmedPartId,ConfirmedPartCode,ConfirmedPartName,ConfirmedBaseQty,
+                     ReviewNote,ReviewedBy,ReviewedByName,ReviewedAt
               FROM dbo.vw_WorkOrder_Full WHERE OrderId=@Id", CommandType.Text, DbHelper.P("@Id", orderId));
         if (t.Rows.Count == 0) return null;
         var r = t.Rows[0];
@@ -89,13 +104,23 @@ public class WorkOrderRepository
             EngineerId = r["EngineerId"] == DBNull.Value ? null : (int)r["EngineerId"],
             ReporterName = r["ReporterName"].ToString()!,
             EngineerName = r["EngineerName"] == DBNull.Value ? null : r["EngineerName"].ToString(),
+            PhotoPath = r["PhotoPath"] == DBNull.Value ? null : r["PhotoPath"].ToString(),
+            Recognized = r["Recognized"] == DBNull.Value ? null : r["Recognized"].ToString(),
+            RecognizedJson = r["RecognizedJson"] == DBNull.Value ? null : r["RecognizedJson"].ToString(),
+            RepairSummary = r["RepairSummary"] == DBNull.Value ? null : r["RepairSummary"].ToString(),
+            MaterialReviewMode = r["MaterialReviewMode"] == DBNull.Value ? null : r["MaterialReviewMode"].ToString(),
+            ConfirmedPartId = r["ConfirmedPartId"] == DBNull.Value ? null : (int)r["ConfirmedPartId"],
+            ConfirmedPartCode = r["ConfirmedPartCode"] == DBNull.Value ? null : r["ConfirmedPartCode"].ToString(),
+            ConfirmedPartName = r["ConfirmedPartName"] == DBNull.Value ? null : r["ConfirmedPartName"].ToString(),
+            ConfirmedBaseQty = r["ConfirmedBaseQty"] == DBNull.Value ? null : (decimal)r["ConfirmedBaseQty"],
+            ReviewNote = r["ReviewNote"] == DBNull.Value ? null : r["ReviewNote"].ToString(),
+            ReviewedBy = r["ReviewedBy"] == DBNull.Value ? null : (int)r["ReviewedBy"],
+            ReviewedByName = r["ReviewedByName"] == DBNull.Value ? null : r["ReviewedByName"].ToString(),
+            ReviewedAt = r["ReviewedAt"] == DBNull.Value ? null : (DateTime?)r["ReviewedAt"],
             CreatedAt = (DateTime)r["CreatedAt"],
             AssignTime = r["AssignTime"] == DBNull.Value ? null : (DateTime?)r["AssignTime"],
             StartTime = r["StartTime"] == DBNull.Value ? null : (DateTime?)r["StartTime"],
-            FinishTime = r["FinishTime"] == DBNull.Value ? null : (DateTime?)r["FinishTime"],
-            PhotoPath = r["PhotoPath"] == DBNull.Value ? null : r["PhotoPath"].ToString(),
-            Recognized = r["Recognized"] == DBNull.Value ? null : r["Recognized"].ToString(),
-            RepairSummary = r["RepairSummary"] == DBNull.Value ? null : r["RepairSummary"].ToString()
+            FinishTime = r["FinishTime"] == DBNull.Value ? null : (DateTime?)r["FinishTime"]
         };
     }
 

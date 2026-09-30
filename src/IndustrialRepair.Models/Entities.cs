@@ -116,12 +116,54 @@ public class WorkOrder
     public string Priority { get; set; } = "Normal";
     public string? PhotoPath { get; set; }
     public string? Recognized { get; set; }
+    public string? RecognizedJson { get; set; }        // 结构化识别候选（版本化文档，见 RecognizedDocument）
     public string Status { get; set; } = "Pending";
     public DateTime CreatedAt { get; set; }
     public DateTime? AssignTime { get; set; }
     public DateTime? StartTime { get; set; }
     public DateTime? FinishTime { get; set; }
     public string? RepairSummary { get; set; }
+
+    /*---- 材料审阅（M1）：未审阅时 MaterialReviewMode 为 null ----*/
+    public string? MaterialReviewMode { get; set; }    // PartConfirmed / BomOnly
+    public int? ConfirmedPartId { get; set; }
+    public string? ConfirmedPartCode { get; set; }
+    public string? ConfirmedPartName { get; set; }
+    public decimal? ConfirmedBaseQty { get; set; }     // 仅 BOM 外补充件：人工基础用量
+    public string? ReviewNote { get; set; }
+    public int? ReviewedBy { get; set; }
+    public string? ReviewedByName { get; set; }
+    public DateTime? ReviewedAt { get; set; }
+}
+
+/// <summary>材料审阅模式（与 usp_ReviewMaterials / 04 迁移约束一致）</summary>
+public static class MaterialReviewMode
+{
+    public const string PartConfirmed = "PartConfirmed";   // 确认重点零件（BOM 内标记 / BOM 外人工用量追加）
+    public const string BomOnly = "BomOnly";               // 仅按整机 BOM 配料
+
+    public static string ToChinese(string? mode) => mode switch
+    {
+        PartConfirmed => "确认重点零件",
+        BomOnly => "仅整机BOM",
+        _ => "未审阅"
+    };
+}
+
+/// <summary>材料审阅请求（工程师/管理员提交）</summary>
+public record MaterialReviewRequest(
+    int OrderId, string Mode, int? PartId = null,
+    decimal? BaseQty = null, string? Note = null);
+
+/// <summary>
+/// 识别候选落库文档（work_order.RecognizedJson，版本 1）。
+/// 保留引擎标识与候选明细；原始文本摘要仍在 Recognized 列，供旧工单回读兜底。
+/// </summary>
+public class RecognizedDocument
+{
+    public int Version { get; set; } = 1;
+    public string Engine { get; set; } = "";
+    public List<RecognizeResult> Candidates { get; set; } = new();
 }
 
 public class WorkOrderRecord

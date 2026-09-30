@@ -38,6 +38,12 @@ internal class UcPicking : UserControl, IRefreshable
         var btnGen = Ui.Btn("为工单算料", 340, 10, 105, 32, OnGenerate);
         var btnIssue = Ui.Btn("领料出库", 460, 10, 95, 32, OnIssue);
         var btnExport = Ui.Btn("导出Excel", 570, 10, 95, 32, OnExport);
+        var lblHint = new UILabel
+        {
+            Text = "整机 BOM 配料：确认零件仅标记重点（★），BOM 外补充件按人工用量追加；工单需先在详情页完成材料审阅。",
+            Location = new Point(680, 16), Size = new Size(470, 34), AutoSize = false,
+            Font = new Font("微软雅黑", 8F), ForeColor = Color.FromArgb(110, 122, 138), TextAlign = ContentAlignment.MiddleLeft
+        };
 
         btnGen.Visible = _user.HasPerm("picking.generate");
         btnIssue.Visible = _user.HasPerm("picking.issue");
@@ -47,7 +53,7 @@ internal class UcPicking : UserControl, IRefreshable
 
         Controls.AddRange(new Control[]
         {
-            Ui.Lbl("状态：", 10, 14, 76), _cmbStatus, btnQuery, btnGen, btnIssue, btnExport,
+            Ui.Lbl("状态：", 10, 14, 76), _cmbStatus, btnQuery, btnGen, btnIssue, btnExport, lblHint,
             _grid, lblItems, _items, _lblSummary
         });
         _grid.SelectionChanged += (_, _) => LoadItems();
