@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.IO.Ports;
 using System.Windows.Forms;
 using IndustrialRepair.BLL;
 using IndustrialRepair.Models;
@@ -8,17 +9,21 @@ using Sunny.UI;
 namespace IndustrialRepair.UI;
 
 /// <summary>
-/// 串口·扫码（物联网设备集成）：真实串口收发 + 无硬件扫码模拟器。
+/// 串口·扫码（物联网设备集成）：真实串口（SerialScannerInput）与无硬件模拟器
+/// （SimulatedScannerInput）实现同一 IScannerInput 契约，本页只面向接口消费；
+/// 手动录入编码走同一条「编码 → 配件查询」流程（规划：设备未到时用同一接口测试）。
 /// 协议帧：PART:配件编码（扫码枪常见前缀格式）。
 /// </summary>
 internal class UcSerial : UserControl, IRefreshable
 {
-    private readonly SerialPortService _serial = new();
     private readonly PartService _parts = new();
+    private IScannerInput? _active;              // 当前扫码输入源（接口类型，切换即换实现）
+    private SerialScannerInput? _serialInput;    // 保留引用：测试帧发送仅串口源支持
     private readonly UIComboBox _cmbPort = Ui.Combo(90, 12, 140);
     private readonly UIComboBox _cmbBaud = Ui.Combo(250, 12, 100);
     private readonly UIButton _btnOpen = Ui.Btn("打开串口", 370, 10, 100, 32);
     private readonly UIButton _btnSim = Ui.Btn("启动扫码模拟器", 490, 10, 140, 32);
+    private readonly UITextBox _txtManual = Ui.Txt("直接输入配件编码，如 P-ZC-001", 120, 56, 220);
     private readonly UITextBox _log = new()
     {
         Location = new Point(10, 100), Size = new Size(700, 560), Multiline = true,
@@ -38,10 +43,17 @@ internal class UcSerial : UserControl, IRefreshable
 
         _btnOpen.Click += OnOpen;
         _btnSim.Click += OnSim;
+        var btnManual = Ui.Btn("查询", 350, 54, 70, 28, (_, _) =>
+        {
+            var code = _txtManual.Text.Trim();
+            if (code.Length == 0) { Ui.Error("请输入配件编码。"); return; }
+            AppendLog("[手动录入] " + code);
+            LookupPart(code);                       // 与扫码帧同一条查询流程
+        });
         var btnSend = Ui.Btn("发送测试帧", 650, 10, 100, 32, (_, _) =>
         {
-            if (!_serial.IsOpen) { Ui.Error("串口未打开。"); return; }
-            try { _serial.Send("PING"); AppendLog(">> PING"); }
+            if (_serialInput is not { IsActive: true }) { Ui.Error("请先打开串口。"); return; }
+            try { _serialInput.Send("PING"); AppendLog(">> PING"); }
             catch (Exception ex) { Ui.Error(ex.Message); }
         });
         var btnScanImg = Ui.Btn("从图片扫码", 760, 10, 100, 32, OnScanImage);
@@ -49,22 +61,23 @@ internal class UcSerial : UserControl, IRefreshable
         Controls.AddRange(new Control[]
         {
             Ui.Lbl("串口：", 10, 14, 76), _cmbPort,
-            Ui.Lbl("波特率：", 200, 14, 50) , _cmbBaud,
-            _btnOpen, _btnSim, btnSend, btnScanImg, _log, _lblPart
+            Ui.Lbl("波特率：", 200, 14, 50), _cmbBaud,
+            _btnOpen, _btnSim, btnSend, btnScanImg,
+            Ui.Lbl("手动录入：", 40, 58, 76), _txtManual, btnManual,
+            _log, _lblPart
         });
-        _serial.FrameReceived += OnFrame;
-        Disposed += (_, _) => _serial.Dispose();
+        Disposed += (_, _) => StopSource();
     }
 
     public void RefreshData()
     {
         _cmbPort.Items.Clear();
-        var ports = _serial.AvailablePorts;
+        var ports = SerialPort.GetPortNames();
         foreach (var p in ports) _cmbPort.Items.Add(p);
         if (_cmbPort.Items.Count == 0)
         {
             _cmbPort.Items.Add("COM1");
-            AppendLog("未检测到物理串口（可使用扫码模拟器演示）。");
+            AppendLog("未检测到物理串口（可使用扫码模拟器或手动录入演示）。");
         }
         _cmbPort.SelectedIndex = 0;
     }
@@ -73,36 +86,60 @@ internal class UcSerial : UserControl, IRefreshable
     {
         try
         {
-            if (_serial.IsOpen)
+            if (_serialInput is { IsActive: true })
             {
-                _serial.Close();
+                StopSource();
                 _btnOpen.Text = "打开串口";
                 AppendLog("串口已关闭。");
+                return;
             }
-            else
-            {
-                _serial.Open(_cmbPort.Text, int.Parse(_cmbBaud.Text));
-                _btnOpen.Text = "关闭串口";
-                AppendLog($"已打开 {_cmbPort.Text} @ {_cmbBaud.Text}，等待扫码帧…");
-            }
+            StopSource();
+            _serialInput = new SerialScannerInput(_cmbPort.Text, int.Parse(_cmbBaud.Text));
+            StartSource(_serialInput);
+            _btnOpen.Text = "关闭串口";
+            AppendLog($"已打开 {_cmbPort.Text} @ {_cmbBaud.Text}，等待扫码帧…");
         }
-        catch (Exception ex) { Ui.Error("串口操作失败：" + ex.Message); }
+        catch (Exception ex)
+        {
+            StopSource();
+            _btnOpen.Text = "打开串口";
+            Ui.Error("串口操作失败：" + ex.Message);
+        }
     }
 
     private void OnSim(object? s, EventArgs e)
     {
-        if (_serial.Simulating)
+        if (_active is SimulatedScannerInput)
         {
-            _serial.StopSimulator();
+            StopSource();
             _btnSim.Text = "启动扫码模拟器";
             AppendLog("扫码模拟器已停止。");
+            return;
         }
-        else
-        {
-            _serial.StartSimulator();
-            _btnSim.Text = "停止扫码模拟器";
-            AppendLog("扫码模拟器已启动：每 4 秒模拟一帧配件条码。");
-        }
+        StopSource();
+        StartSource(new SimulatedScannerInput());
+        _btnSim.Text = "停止扫码模拟器";
+        AppendLog("扫码模拟器已启动：每 4 秒模拟一帧配件条码。");
+    }
+
+    /// <summary>切换到新输入源：旧源先解绑停止，再订阅并启动新源（同一接口、同一消费流程）。</summary>
+    private void StartSource(IScannerInput source)
+    {
+        _active = source;
+        _active.FrameReceived += OnFrame;
+        _active.Start();
+    }
+
+    private void StopSource()
+    {
+        if (_active == null) return;
+        _active.FrameReceived -= OnFrame;
+        _active.Stop();
+        _active.Dispose();
+        if (!ReferenceEquals(_active, _serialInput)) _btnSim.Text = "启动扫码模拟器";
+        else _serialInput = null;
+        _btnOpen.Text = "打开串口";
+        _active = null;
     }
 
     /// <summary>从图片扫码（开源库 ZXing.Net 解码照片中的二维码/条码）</summary>
@@ -119,14 +156,19 @@ internal class UcSerial : UserControl, IRefreshable
         catch (Exception ex) { Ui.Error(ex.Message); }
     }
 
-    /// <summary>串口/模拟器数据帧回调（可能来自线程池，封送到 UI 线程）</summary>
+    /// <summary>输入源数据帧回调（可能来自线程池，封送到 UI 线程）</summary>
     private void OnFrame(string frame, bool fromSim)
     {
         if (InvokeRequired) { BeginInvoke(() => OnFrame(frame, fromSim)); return; }
         AppendLog($"{(fromSim ? "[模拟] " : "")}<< {frame}");
         var code = SerialPortService.ParsePartCode(frame);
         if (code == null) return;
+        LookupPart(code);
+    }
 
+    /// <summary>编码 → 配件查询：串口 / 模拟器 / 图片 / 手动录入共用此流程</summary>
+    private void LookupPart(string code)
+    {
         var hit = _parts.Search(code).FirstOrDefault();
         _lblPart.Text = hit == null
             ? $"扫码：{code}\n未在配件库中找到该编码。"

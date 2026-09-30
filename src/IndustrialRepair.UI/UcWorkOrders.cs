@@ -187,6 +187,8 @@ internal class FReportDialog : UIForm
         ForeColor = Color.FromArgb(0, 122, 204), Font = new Font("微软雅黑", 8.5F), Text = "拍照识别：等待图片…"
     };
     private string? _photoPath;
+    private List<RecognizeResult>? _top3;    // 预览用过的识别候选，提交时随工单留痕
+    private readonly IImageRecognizer _recognizer = new RecognitionEngine();
 
     public FReportDialog(UserInfo user)
     {
@@ -203,7 +205,7 @@ internal class FReportDialog : UIForm
         _cmbPriority.SelectedIndex = 0;
 
         var btnPhoto = Ui.Btn("拍照 / 选择照片", 410, 232, 140, 34, OnPickPhoto);
-        var btnClear = Ui.Btn("清除", 560, 232, 70, 34, (_, _) => { _photoPath = null; _photo.Image = null; _lblRecog.Text = "拍照识别：等待图片…"; });
+        var btnClear = Ui.Btn("清除", 560, 232, 70, 34, (_, _) => { _photoPath = null; _top3 = null; _photo.Image = null; _lblRecog.Text = "拍照识别：等待图片…"; });
         var btnOk = Ui.Btn("提交报修", 90, 270, 140, 36, OnSubmit);
         var btnBack = Ui.Btn("取消", 250, 270, 140, 36, (_, _) => Close());
 
@@ -225,10 +227,10 @@ internal class FReportDialog : UIForm
             _photoPath = ofd.FileName;
             _photo.Image?.Dispose();
             _photo.Image = Image.FromFile(ofd.FileName);
-            // 本地压缩保存后识别（与提交时一致）
+            // 本地压缩保存后识别（与提交时一致：候选缓存后随工单留痕，不重复识别）
             var saved = ImageUtil.CompressSave(ofd.FileName, WorkOrderService.PhotoDir);
-            var top = new RecognitionEngine().Recognize(saved);
-            _lblRecog.Text = "拍照识别 Top3：\n" + string.Join("\n", top.Select(r => $"{r.PartName} {r.Score}%"));
+            _top3 = _recognizer.Recognize(saved);
+            _lblRecog.Text = "拍照识别 Top3：\n" + string.Join("\n", _top3.Select(r => $"{r.PartName} {r.Score}%"));
         }
         catch (Exception ex) { Ui.Error("图片处理失败：" + ex.Message); }
     }
@@ -243,7 +245,7 @@ internal class FReportDialog : UIForm
             "紧急" => PriorityCode.Urgent, "严重" => PriorityCode.Critical,
             "特修" => PriorityCode.Special, _ => PriorityCode.Normal
         };
-        var r = _svc.Report(devices[idx].DeviceId, _user.UserId, _txtDesc.Text, _cmbType.Text, priority, _photoPath);
+        var r = _svc.Report(devices[idx].DeviceId, _user.UserId, _txtDesc.Text, _cmbType.Text, priority, _photoPath, _top3);
         if (!r.Success) { Ui.Error(r.Message); return; }
         Ui.Info(r.Message + (_photoPath == null ? "" : "\n照片已本地压缩保存。"));
         DialogResult = DialogResult.OK;

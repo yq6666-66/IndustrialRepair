@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.IO;
+using System.Linq;
 using IndustrialRepair.DAL;
 using IndustrialRepair.Models;
 
@@ -13,7 +14,7 @@ public class WorkOrderService
 {
     private readonly WorkOrderRepository _orders = new();
     private readonly BasicRepository _basic = new();
-    private readonly RecognitionEngine _recognizer = new();
+    private readonly IImageRecognizer _recognizer = new RecognitionEngine();
 
     /// <summary>照片保存目录（本地压缩后上传的落盘位置）</summary>
     public static string PhotoDir =>
@@ -24,9 +25,12 @@ public class WorkOrderService
 
     /// <summary>
     /// 创建报修工单：照片本地压缩保存 + 拍照识别（特征库匹配）+ 存储过程建单。
+    /// candidates 传入界面预览用过的识别候选（避免重复识别且与预览一致），
+    /// 原始候选全部随工单留痕：低置信度时明确标注"需人工确认"。
     /// </summary>
     public Result<string> Report(int deviceId, int reporterId, string faultDesc, string faultType,
-                                 string priority, string? photoSourcePath)
+                                 string priority, string? photoSourcePath,
+                                 IReadOnlyList<RecognizeResult>? candidates = null)
     {
         if (deviceId <= 0) return Result<string>.Fail("请选择报修设备。");
         if (string.IsNullOrWhiteSpace(faultDesc)) return Result<string>.Fail("请填写故障描述。");
@@ -38,11 +42,13 @@ public class WorkOrderService
             if (!string.IsNullOrWhiteSpace(photoSourcePath) && File.Exists(photoSourcePath))
             {
                 savedPath = ImageUtil.CompressSave(photoSourcePath, PhotoDir);   // 本地拍照压缩上传
-                var best = _recognizer.Recognize(savedPath)[0];
-                if (best != null && best.Score >= 60)
-                    recognized = $"自动识别：{best.PartName}({best.PartCode}) 置信度{best.Score}%";
-                else if (best != null)
-                    recognized = $"识别候选：{best.PartName}({best.PartCode}) 置信度{best.Score}%（低于60%需人工确认）";
+                var top = candidates is { Count: > 0 } ? candidates : _recognizer.Recognize(savedPath);
+                var best = top[0];
+                var candText = string.Join("，", top.Select(r => $"{r.PartName} {r.Score}%"));
+                recognized = (best.Score >= 60
+                        ? $"自动识别：{best.PartName}({best.PartCode}) 置信度{best.Score}%"
+                        : $"识别候选：{best.PartName}({best.PartCode}) 置信度{best.Score}%（低于60%需人工确认）")
+                    + $"｜候选：{candText}";
             }
             var orderNo = _orders.Create(deviceId, reporterId, faultDesc.Trim(), faultType, priority, savedPath, recognized);
             return Result<string>.Ok(orderNo, $"报修成功，工单号 {orderNo}。");

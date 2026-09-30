@@ -15,8 +15,9 @@ namespace IndustrialRepair.BLL;
 /// ② OpenCV：CLAHE 增强 → 中心 ROI 均值色 → 最大轮廓圆度(4πA/P²)判形状、轮廓面积占比判尺寸；
 /// ③ 特征库融合：与 part.FeatureJson（颜色/形状/尺寸）加权最近邻，输出 Top3 与可解释理由。
 /// OpenCV 运行异常时自动降级为纯托管旧规则引擎，保证演示稳定。
+/// 实现 IImageRecognizer 契约：课程识别模型到位后按同一接口替换接入。
 /// </summary>
-public class RecognitionEngine
+public class RecognitionEngine : IImageRecognizer
 {
     private class PartFeature
     {
