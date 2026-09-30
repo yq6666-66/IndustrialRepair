@@ -43,12 +43,12 @@ public class FMain : UIForm
         {
             Text = "工业维修智能化零件分配平台", ForeColor = Color.White,
             Font = new Font("微软雅黑", 13F, FontStyle.Bold),
-            Location = new Point(18, 18), Size = new Size(340, 30), AutoSize = false
+            Location = new Point(18, 18), Size = new Size(360, 30), AutoSize = false
         };
         _lblPage = new UILabel
         {
             ForeColor = Color.FromArgb(205, 226, 255), Font = new Font("微软雅黑", 10.5F),
-            Location = new Point(372, 21), Size = new Size(320, 24), AutoSize = false
+            Location = new Point(388, 21), Size = new Size(340, 24), AutoSize = false
         };
         _lblUser = new UILabel
         {
@@ -144,13 +144,13 @@ public class FMain : UIForm
         {
             Text = "数据库：IndustrialRepairDb（LocalDB）· 16 表 / 9 存储过程 / 3 触发器 / 4 视图",
             ForeColor = Color.FromArgb(110, 122, 138), Font = new Font("微软雅黑", 8.5F),
-            Location = new Point(14, 6), Size = new Size(430, 18), AutoSize = false
+            Location = new Point(14, 6), Size = new Size(580, 18), AutoSize = false
         };
         _lblClock = new UILabel
         {
             ForeColor = Color.FromArgb(110, 122, 138), Font = new Font("微软雅黑", 8.5F),
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
-            Location = new Point(ClientSize.Width - 368, 6), Size = new Size(354, 18),
+            Location = new Point(ClientSize.Width - 448, 6), Size = new Size(430, 18),
             AutoSize = false, TextAlign = ContentAlignment.MiddleRight
         };
         status.Controls.AddRange(new Control[] { lblDb, _lblClock });
