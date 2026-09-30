@@ -72,8 +72,8 @@ public class WorkOrderRepository
     public WorkOrder? GetById(int orderId)
     {
         var t = DbHelper.GetTable(
-            @"SELECT OrderId,OrderNo,Status,Priority,FaultType,FaultDesc,DeviceCode,DeviceName,
-                     ReporterName,EngineerName,CreatedAt,AssignTime,StartTime,FinishTime,PhotoPath,Recognized,RepairSummary
+            @"SELECT OrderId,OrderNo,Status,Priority,FaultType,FaultDesc,DeviceId,DeviceCode,DeviceName,
+                     ReporterId,EngineerId,ReporterName,EngineerName,CreatedAt,AssignTime,StartTime,FinishTime,PhotoPath,Recognized,RepairSummary
               FROM dbo.vw_WorkOrder_Full WHERE OrderId=@Id", CommandType.Text, DbHelper.P("@Id", orderId));
         if (t.Rows.Count == 0) return null;
         var r = t.Rows[0];
@@ -82,8 +82,11 @@ public class WorkOrderRepository
             OrderId = (int)r["OrderId"], OrderNo = r["OrderNo"].ToString()!, Status = r["Status"].ToString()!,
             Priority = r["Priority"].ToString()!,
             FaultType = r["FaultType"] == DBNull.Value ? null : r["FaultType"].ToString(),
-            FaultDesc = r["FaultDesc"].ToString()!, DeviceCode = r["DeviceCode"].ToString()!,
+            FaultDesc = r["FaultDesc"].ToString()!, DeviceId = (int)r["DeviceId"],
+            DeviceCode = r["DeviceCode"].ToString()!,
             DeviceName = r["DeviceName"].ToString()!,
+            ReporterId = (int)r["ReporterId"],
+            EngineerId = r["EngineerId"] == DBNull.Value ? null : (int)r["EngineerId"],
             ReporterName = r["ReporterName"].ToString()!,
             EngineerName = r["EngineerName"] == DBNull.Value ? null : r["EngineerName"].ToString(),
             CreatedAt = (DateTime)r["CreatedAt"],

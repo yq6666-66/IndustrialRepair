@@ -14,6 +14,20 @@ static class Program
         { Handle(e.Exception, "Task异常"); e.SetObserved(); };
 
         ApplicationConfiguration.Initialize();
+
+        // M0：登录前结构检查/升级（失败阻止进入业务系统，重启可重试）
+        try
+        {
+            new BLL.DbInitializer().EnsureStructure();
+        }
+        catch (Exception ex)
+        {
+            Handle(ex, "数据库结构检查/升级失败");
+            MessageBox.Show("数据库结构检查或升级失败，系统退出。\r\n请查看日志或联系管理员，修复后重新启动可自动重试。",
+                "启动失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
         while (true)
         {
             using var login = new FLogin();

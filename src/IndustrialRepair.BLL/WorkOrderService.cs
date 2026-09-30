@@ -34,6 +34,10 @@ public class WorkOrderService
     {
         if (deviceId <= 0) return Result<string>.Fail("请选择报修设备。");
         if (string.IsNullOrWhiteSpace(faultDesc)) return Result<string>.Fail("请填写故障描述。");
+        var guard = Guard.Session("order.report");
+        if (!guard.Success) return Result<string>.Fail(guard.Message);
+        guard = Guard.SameOperator(reporterId);
+        if (!guard.Success) return Result<string>.Fail(guard.Message);
 
         string? savedPath = null;
         string? recognized = null;
@@ -61,6 +65,10 @@ public class WorkOrderService
 
     public Result Assign(int orderId, int engineerId, int operatorId)
     {
+        var guard = Guard.Session("order.assign");
+        if (!guard.Success) return guard;
+        guard = Guard.SameOperator(operatorId);
+        if (!guard.Success) return guard;
         try { _orders.Assign(orderId, engineerId, operatorId); return Result.Ok("派单成功。"); }
         catch (SqlException ex) { return Result.Fail(DbHelper.FriendlyError(ex)); }
         catch (Exception ex) { return Result.Fail(ex.Message); }
@@ -68,6 +76,12 @@ public class WorkOrderService
 
     public Result Take(int orderId, int engineerId)
     {
+        var guard = Guard.Session("order.handle");
+        if (!guard.Success) return guard;
+        guard = Guard.SameOperator(engineerId);
+        if (!guard.Success) return guard;
+        guard = OrderOperator(orderId);
+        if (!guard.Success) return guard;
         try { _orders.Take(orderId, engineerId); return Result.Ok("接单成功，开始维修。"); }
         catch (SqlException ex) { return Result.Fail(DbHelper.FriendlyError(ex)); }
         catch (Exception ex) { return Result.Fail(ex.Message); }
@@ -75,6 +89,12 @@ public class WorkOrderService
 
     public Result Complete(int orderId, int operatorId, string? summary)
     {
+        var guard = Guard.Session("order.handle");
+        if (!guard.Success) return guard;
+        guard = Guard.SameOperator(operatorId);
+        if (!guard.Success) return guard;
+        guard = OrderOperator(orderId);
+        if (!guard.Success) return guard;
         try { _orders.Complete(orderId, operatorId, summary); return Result.Ok("工单已完成。"); }
         catch (SqlException ex) { return Result.Fail(DbHelper.FriendlyError(ex)); }
         catch (Exception ex) { return Result.Fail(ex.Message); }
@@ -82,9 +102,23 @@ public class WorkOrderService
 
     public Result Cancel(int orderId, int operatorId, string reason)
     {
+        var guard = Guard.Session("order.handle");
+        if (!guard.Success) return guard;
+        guard = Guard.SameOperator(operatorId);
+        if (!guard.Success) return guard;
+        guard = OrderOperator(orderId);
+        if (!guard.Success) return guard;
         try { _orders.Cancel(orderId, operatorId, reason); return Result.Ok("工单已取消。"); }
         catch (SqlException ex) { return Result.Fail(DbHelper.FriendlyError(ex)); }
         catch (Exception ex) { return Result.Fail(ex.Message); }
+    }
+
+    /// <summary>工单归属校验（工程师限本人获派单；管理员/调度放行）</summary>
+    private Result OrderOperator(int orderId)
+    {
+        var order = Get(orderId);
+        if (order == null) return Result.Fail("工单不存在。");
+        return Guard.OrderOperator(order);
     }
 
     public DataTable Query(string? status, string? keyword, int? userId, bool onlyMine) =>

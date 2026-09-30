@@ -11,6 +11,7 @@
   <ItemGroup>
     <None Include="..\..\db\01_init.sql" Link="db\01_init.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\db\02_procs.sql" Link="db\02_procs.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\db\04_material_review_migration.sql" Link="db\04_material_review_migration.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <PropertyGroup>

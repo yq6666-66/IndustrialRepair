@@ -53,7 +53,11 @@ public class MqttGateway : IDisposable
     public bool Running { get; private set; }
     public int Port { get; } = 18835;   // 避开常用 1883，减少端口冲突
 
-    public async Task StartAsync()
+    /// <summary>
+    /// 启动网关。withSimulator=false 不启动随机遥测模拟器——
+    /// 测试/联调时配合 PublishTelemetry 用确定性输入验证越限报修与冷却。
+    /// </summary>
+    public async Task StartAsync(bool withSimulator = true)
     {
         if (Running) return;
         var factory = new MqttFactory();
@@ -82,9 +86,25 @@ public class MqttGateway : IDisposable
         foreach (var d in _devices)
             _state[d.DeviceId] = (55 + _rand.NextDouble() * 12, 3.5 + _rand.NextDouble() * 2.5);
 
-        _simTimer = new System.Threading.Timer(_ => PublishAll(), null, 0, 3000);
+        if (withSimulator)
+            _simTimer = new System.Threading.Timer(_ => PublishAll(), null, 0, 3000);
         Running = true;
-        StatusChanged?.Invoke($"MQTT 网关运行中：内嵌 Broker 127.0.0.1:{Port}，设备 {_devices.Count} 台，3 秒/帧");
+        StatusChanged?.Invoke(withSimulator
+            ? $"MQTT 网关运行中：内嵌 Broker 127.0.0.1:{Port}，设备 {_devices.Count} 台，3 秒/帧"
+            : $"MQTT 网关运行中：内嵌 Broker 127.0.0.1:{Port}，设备 {_devices.Count} 台（模拟器关闭）");
+    }
+
+    /// <summary>发布一帧指定遥测（确定性输入：测试越限报修/冷却联调用）</summary>
+    public void PublishTelemetry(TelemetryFrame frame)
+    {
+        if (_client?.IsConnected != true)
+            throw new InvalidOperationException("MQTT 网关未启动。");
+        var payload = JsonSerializer.Serialize(frame);
+        _client.PublishAsync(new MqttApplicationMessageBuilder()
+            .WithTopic($"factory/{frame.DeviceId}/telemetry")
+            .WithPayload(payload)
+            .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
+            .Build()).Wait(3000);
     }
 
     public async Task StopAsync()

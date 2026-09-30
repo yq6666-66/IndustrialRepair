@@ -1,5 +1,13 @@
 SET NOCOUNT ON;
-USE IndustrialRepairDb;
+-- ★ 业务库防护：本脚本含写入与清理，只允许在独立测试库执行（sqlcmd -d 测试库名）
+IF DB_NAME() = N'IndustrialRepairDb'
+BEGIN
+    RAISERROR(N'SQL 冒烟禁止在业务库 IndustrialRepairDb 上运行：请用 sqlcmd -d 指定独立测试库（如 IndustrialRepair_Test_R4）。', 16, 127);
+    SET NOEXEC ON;
+END
+GO
+USE IndustrialRepairDb;   -- 手工执行时改为测试库名（托管测试入口会显式指定连接）
+GO
 -- 临时测试用户
 INSERT INTO dbo.sys_user(UserName, PasswordHash, RealName, RoleId)
 SELECT N'test_rep', N'x', N'测试报修人', RoleId FROM sys_role WHERE RoleCode=N'Reporter'
@@ -32,3 +40,5 @@ DELETE dbo.work_order_record WHERE OrderId=@oid; DELETE dbo.work_order WHERE Ord
 UPDATE dbo.part SET StockQty = StockQty + 0; -- stock stays decremented; restore via re-run of seed not needed (demo ok)
 DELETE dbo.sys_user WHERE UserName IN (N'test_rep', N'test_eng');
 PRINT N'SMOKE OK';
+SET NOEXEC OFF;   -- 恢复会话执行状态（配合文件头业务库防护）
+GO

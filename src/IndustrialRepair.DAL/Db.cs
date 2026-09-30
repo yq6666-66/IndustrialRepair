@@ -18,6 +18,17 @@ public static class Db
 
     static Db() => LoadConfig();
 
+    /// <summary>
+    /// 显式注入连接串（仅限测试/迁移工具在进程启动时调用一次；
+    /// 连接串本身不含口令，LocalDB 为受信连接）。
+    /// </summary>
+    public static void UseConnectionString(string connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new ArgumentException("连接串不能为空。", nameof(connectionString));
+        ConnectionString = connectionString;
+    }
+
     private static void LoadConfig()
     {
         try

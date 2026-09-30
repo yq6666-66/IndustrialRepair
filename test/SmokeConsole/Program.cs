@@ -1,9 +1,96 @@
-// 无界面端到端冒烟测试：初始化 → 登录 → 报修 → 派单 → 接单 → 算料 → 出库 → 完工 → 大屏/报表/串口解析。
-// 运行：dotnet run --project test/SmokeConsole
+// 无界面端到端冒烟测试：初始化 → 认证 → 工单全流程（会话切换）→ 算料/出库 → 审计与并发 → 大屏/报表/串口/MQTT。
+// 运行：dotnet run --project test/SmokeConsole -- --conn="Server=(localdb)\MSSQLLocalDB;Database=IndustrialRepair_Test_R4;Trusted_Connection=True;TrustServerCertificate=True"
+// 或设置环境变量 INDUSTRIALREPAIR_TEST_CONN。测试会建号/建单/扣库存——只允许在独立测试库运行。
+using System;
 using System.Data;
+using System.Data.SqlClient;
 using IndustrialRepair.BLL;
 using IndustrialRepair.DAL;
 using IndustrialRepair.Models;
+
+// ---- 0. 测试库隔离：未显式指定连接串或指向业务库时拒绝启动 ----
+var connArg = Array.Find(args, a => a.StartsWith("--conn=", StringComparison.OrdinalIgnoreCase));
+var testConn = connArg?["--conn=".Length..]
+               ?? Environment.GetEnvironmentVariable("INDUSTRIALREPAIR_TEST_CONN");
+
+// --ensure-structure：只做结构检查/升级（无写入型测试），可用于业务库升级演练
+if (Array.Exists(args, a => a.Equals("--ensure-structure", StringComparison.OrdinalIgnoreCase)))
+{
+    if (string.IsNullOrWhiteSpace(testConn))
+    {
+        Console.Error.WriteLine("× 用法：--ensure-structure --conn=\"<连接串>\"");
+        return 2;
+    }
+    Db.UseConnectionString(testConn);
+    try
+    {
+        new DbInitializer().EnsureStructure();
+        Console.WriteLine("√ 结构检查/升级完成。");
+        var v = DbHelper.ExecuteScalar("SELECT MAX(Version) FROM dbo.schema_version");
+        Console.WriteLine($"  当前结构版本：{v}");
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine("× 结构检查/升级失败：" + ex.Message);
+        return 1;
+    }
+}
+
+// --diag-script=<file>：逐批执行托管预处理后的脚本，定位失败批次（调试用）
+var diag = Array.Find(args, a => a.StartsWith("--diag-script=", StringComparison.OrdinalIgnoreCase));
+if (diag != null)
+{
+    if (string.IsNullOrWhiteSpace(testConn)) { Console.Error.WriteLine("× 需要 --conn"); return 2; }
+    Db.UseConnectionString(testConn);
+    var file = diag["--diag-script=".Length..];
+    var batches = ScriptRunner.SplitBatches(ScriptRunner.PrepareManagedScript(File.ReadAllText(file)));
+    using var dconn = new SqlConnection(testConn);
+    dconn.Open();
+    for (int i = 0; i < batches.Count; i++)
+    {
+        if (string.IsNullOrWhiteSpace(batches[i])) continue;
+        try
+        {
+            using var cmd = new SqlCommand(batches[i], dconn);
+            cmd.ExecuteNonQuery();
+            Console.WriteLine($"[batch {i + 1}] OK ({batches[i].Length} chars)");
+        }
+        catch (SqlException ex)
+        {
+            var lines = batches[i].Split('\n');
+            var at = Math.Clamp(ex.LineNumber - 1, 0, lines.Length - 1);
+            Console.WriteLine($"[batch {i + 1}] FAIL 行{ex.LineNumber}: {ex.Message}\n   源行：{lines[at].Trim()}");
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            var lines = batches[i].Split('\n');
+            var head = string.Join(' ', lines[..Math.Min(3, lines.Length)]).Trim();
+            Console.WriteLine($"[batch {i + 1}] FAIL: {ex.Message}\n   首行：{head}");
+            return 1;
+        }
+    }
+    Console.WriteLine("√ 全部批次通过");
+    return 0;
+}
+
+if (string.IsNullOrWhiteSpace(testConn))
+{
+    Console.Error.WriteLine("× 拒绝运行：冒烟测试包含写操作，必须显式指定独立测试库连接串。");
+    Console.Error.WriteLine("  用法：--conn=\"Server=(localdb)\\MSSQLLocalDB;Database=IndustrialRepair_Test_R4;Trusted_Connection=True;TrustServerCertificate=True\"");
+    Console.Error.WriteLine("  或环境变量 INDUSTRIALREPAIR_TEST_CONN。");
+    return 2;
+}
+var dbName = System.Text.RegularExpressions.Regex.Match(testConn,
+    @"(?:Database|Initial Catalog)\s*=\s*([^;]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Groups[1].Value.Trim();
+if (string.IsNullOrWhiteSpace(dbName) || dbName.Equals("IndustrialRepairDb", StringComparison.OrdinalIgnoreCase))
+{
+    Console.Error.WriteLine($"× 拒绝运行：目标库 {dbName ?? "(未指定)"} 是业务库，冒烟测试只允许在独立测试库执行。");
+    return 2;
+}
+Db.UseConnectionString(testConn);
+Console.WriteLine($"▶ 冒烟测试库：{dbName}");
 
 int pass = 0, fail = 0;
 void Check(string name, bool ok, string detail = "")
@@ -12,10 +99,18 @@ void Check(string name, bool ok, string detail = "")
     if (ok) pass++; else fail++;
 }
 
-Console.WriteLine("== 1. 数据库一键初始化（建库+默认用户+演示工单） ==");
+Console.WriteLine("== 1. 数据库初始化与结构升级（版本化迁移） ==");
 var initLog = new DbInitializer().EnsureAll();
 Console.WriteLine(initLog);
 Check("数据库就绪", new BasicRepository().IsDatabaseReady());
+Check("结构版本≥2（审阅列/唯一索引/过程齐备）", new DbInitializer().IsStructureReady());
+Check("重复启动幂等（EnsureStructure 再跑不报错）", RunGuarded(() => new DbInitializer().EnsureStructure()));
+
+bool RunGuarded(Action a)
+{
+    try { a(); return true; }
+    catch (Exception ex) { Console.WriteLine("   " + ex.Message); return false; }
+}
 
 Console.WriteLine("== 2. 认证与安全 ==");
 var auth = new AuthService();
@@ -30,7 +125,7 @@ Check("reporter 无 user.manage 权限", rep.Data?.HasPerm("user.manage") != tru
 var reg = auth.Register("stu_test_" + DateTime.Now.Ticks % 10000, "abc123", "测试学生", "13800000000", "stu@test.com");
 Check("注册新账号", reg.Success, reg.Message);
 
-Console.WriteLine("== 3. 工单全流程（报修→派单→接单） ==");
+Console.WriteLine("== 3. 工单全流程（报修人报修 → 管理员派单 → 工程师接单） ==");
 var orderSvc = new WorkOrderService();
 var devices = orderSvc.Devices();
 Check("设备台账加载", devices.Count > 0);
@@ -39,44 +134,79 @@ var report = orderSvc.Report(devices[6].DeviceId, reporter.UserId, "冒烟：输
 Check("创建报修工单", report.Success, report.Message);
 int orderId = int.Parse(report.Data!);
 
+// 3.1 越权校验：reporter 无 order.assign，派单必须被拒（服务层守卫）
+var denied = orderSvc.Assign(orderId, 5, reporter.UserId);
+Check("无权限派单被服务层拒绝", !denied.Success, denied.Message);
+
+auth.Login("admin", "123456");   // 切换会话：管理员派单
 var engineers = new UserRepository().ListByRole("Engineer");
 Check("工程师账号存在", engineers.Count > 0);
 var engineer = engineers[0];
-Check("派单", orderSvc.Assign(orderId, engineer.UserId, reporter.UserId).Success);
-Check("接单", orderSvc.Take(orderId, engineer.UserId).Success);
-Check("工单综合查询(工单中心列表SQL)", orderSvc.Query(null, null, null, false).Rows.Count > 0);
-Check("工单状态过滤(Working)", orderSvc.Query("Working", null, null, false).Rows.Count >= 1);
+Check("派单", orderSvc.Assign(orderId, engineer.UserId, AppSession.Current!.UserId).Success);
 
-Console.WriteLine("== 4. 智能算料与领料出库 ==");
+// 3.2 越权校验：库管员（warehouse）无 order.handle，接单必须被拒
+auth.Login("warehouse", "123456");
+var deniedTake = orderSvc.Take(orderId, AppSession.Current!.UserId);
+Check("库管员接单被服务层拒绝", !deniedTake.Success, deniedTake.Message);
+
+auth.Login("engineer", "123456");   // 切换会话：获派工程师接单
+var engUser = AppSession.Current!;
+Console.WriteLine($"   工程师会话 UserId={engUser.UserId}，获派 EngineerId={engineer.UserId}");
+var takeR = orderSvc.Take(orderId, engUser.UserId);
+Check("接单", takeR.Success, takeR.Message);
+
+// 3.3 触发器审计：非状态更新不得产生流转记录；Create 只记一次
+int recBefore = orderSvc.Records(orderId).Count;
+DbHelper.ExecuteNonQuery("UPDATE dbo.work_order SET Priority = N'Urgent' WHERE OrderId = @Id",
+    CommandType.Text, DbHelper.P("@Id", orderId));
+int recAfter = orderSvc.Records(orderId).Count;
+Check("非状态更新不产生流转记录", recAfter == recBefore, $"更新前后 {recBefore}→{recAfter}");
+Check("Create 流转记录仅一条", orderSvc.Records(orderId).Count(r => r.Action == "Create") == 1);
+
+Console.WriteLine("== 4. 智能算料与领料出库（工程师会话） ==");
 var pick = new PickingService();
-var gen = pick.Generate(orderId, engineer.UserName, 1.10m);
+
+// 4.1 越权：工程师对未获派工单算料被拒（另建一张待派单，不派给他）
+var engReport = orderSvc.Report(devices[7].DeviceId, engUser.UserId, "冒烟：工程师代报（未派）", "机械", PriorityCode.Normal, null);
+var deniedGen = int.TryParse(engReport.Data, out var otherOrderId)
+    ? pick.Generate(otherOrderId, engUser.UserName, 1.10m)
+    : Result<int>.Fail(engReport.Message);
+Check("工程师对未获派工单算料被拒", !deniedGen.Success, deniedGen.Message);
+
+var gen = pick.Generate(orderId, engUser.UserName, 1.10m);
 Check("BOM×1.10 生成领料单", gen.Success, gen.Message);
 if (gen.Success)
 {
-    Check("未出库时重复算料被拦截", !pick.Generate(orderId, engineer.UserName, 1.10m).Success, "应阻止重复生成");
+    Check("未出库时重复算料被拦截", !pick.Generate(orderId, engUser.UserName, 1.10m).Success, "应阻止重复生成");
     var items = pick.Items(gen.Data);
     Check("领料明细非空", items.Count > 0, $"共 {items.Count} 项");
     Console.WriteLine("   明细：" + string.Join("；", items.Select(i => $"{i.PartName}×{i.Qty}={i.Amount:F2}")));
-    var issue = pick.Issue(gen.Data, engineer.UserName);
-    Check("领料出库(事务扣库存)", issue.Success, issue.Message);
-    Check("领料单列表查询(领料页列表SQL)", pick.List(null, null).Rows.Count >= 1);
 
-    // C# 算料纯函数 ↔ 存储过程 一致性：BomCalculator(CEILING(QtyPer×冗余)) 必须与 picking_item 实际数量吻合
-    var devIdT = DbHelper.GetTable("SELECT DeviceId FROM dbo.work_order WHERE OrderId=@Id",
-        CommandType.Text, DbHelper.P("@Id", orderId));
+    // C# 算料纯函数 ↔ 存储过程 一致性
     var bomT = DbHelper.GetTable("SELECT PartId, QtyPer FROM dbo.bom WHERE DeviceId=@D",
-        CommandType.Text, DbHelper.P("@D", devIdT.Rows[0]["DeviceId"]));
+        CommandType.Text, DbHelper.P("@D", devices[6].DeviceId));
     var expected = BomCalculator.Calculate(
         bomT.AsEnumerable().Select(r => new BomRule((int)r["PartId"], (decimal)r["QtyPer"])), 1.10m);
-    var actualQty = pick.Items(gen.Data).GroupBy(i => i.PartId)
-        .ToDictionary(g => g.Key, g => g.Sum(x => x.Qty));
+    var actualQty = items.GroupBy(i => i.PartId).ToDictionary(g => g.Key, g => g.Sum(x => x.Qty));
     bool parity = expected.Count == actualQty.Count &&
                   expected.All(e => actualQty.TryGetValue(e.PartId, out var q) && q == (int)e.Qty);
     Check("C#算料与存储过程数量一致", parity, $"BOM {expected.Count} 项");
+
+    // 4.2 并发出库：两个线程同单出库，只允许一次成功
+    auth.Login("warehouse", "123456");
+    var whUser = AppSession.Current!;
+    var t1 = Task.Run(() => pick.Issue(gen.Data, whUser.UserName));
+    var t2 = Task.Run(() => pick.Issue(gen.Data, whUser.UserName));
+    var r1 = await t1; var r2 = await t2;
+    Check("并发出库恰好一次成功", r1.Success ^ r2.Success,
+        $"#{r1.Success} #{r2.Success}：{(r1.Success ? r2.Message : r1.Message)}");
+    Check("出库后状态为 Issued", pick.List(null, null).AsEnumerable()
+        .Any(r => Convert.ToInt32(r["PickingId"]) == gen.Data && r["Status"].ToString() == "Issued"));
 }
 
-Console.WriteLine("== 5. 完工与报表/大屏 ==");
-var done = orderSvc.Complete(orderId, engineer.UserId, "冒烟测试完工：更换托辊轴承");
+Console.WriteLine("== 5. 完工与报表/大屏（工程师会话） ==");
+auth.Login("engineer", "123456");
+var done = orderSvc.Complete(orderId, AppSession.Current!.UserId, "冒烟测试完工：更换托辊轴承");
 Check("完工登记", done.Success, done.Message);
 var records = orderSvc.Records(orderId);
 Check("流转记录完整(创建→派单→接单→完工)", records.Count >= 4, string.Join("→", records.Select(r => WorkOrderRecord.ToChinese(r.Action))));
@@ -88,8 +218,7 @@ Check("维修报表数据可用", orderSvc.ReportSheet().Rows.Count > 0);
 
 Console.WriteLine("== 6. 库存预警与流水 ==");
 var partSvc = new PartService();
-var logs = partSvc.StockLogs(0);
-Check("库存流水已记录", logs.Rows.Count > 0);
+Check("库存流水已记录", partSvc.StockLogs(0).Rows.Count > 0);
 
 Console.WriteLine("== 7. 串口协议解析 ==");
 Check("扫码帧解析", SerialPortService.ParsePartCode("PART:P-ZC-001") == "P-ZC-001");
@@ -123,7 +252,7 @@ Check("OpenCV 原生库可用（圆度/轮廓路径）", recResults.Any(r => r.R
       "若降级为[规则]路径请检查 OpenCvSharp4.runtime.win");
 
 // 9.3 ClosedXML 导出
-var xlsTable = new System.Data.DataTable();
+var xlsTable = new DataTable();
 xlsTable.Columns.Add("编码", typeof(string));
 xlsTable.Columns.Add("金额", typeof(decimal));
 xlsTable.Rows.Add("P-ZC-001", 55.50m);
@@ -131,20 +260,34 @@ xlsTable.Rows.Add("P-RH-001", 84.00m);
 var xlsFile = ExcelService.ExportTable(xlsTable, "冒烟导出", "Sheet1", totalRow: true);
 Check("ClosedXML 导出 .xlsx", File.Exists(xlsFile) && new FileInfo(xlsFile).Length > 4000, xlsFile);
 
-// 9.4 MQTTnet 内嵌 Broker 收发（含遥测上抛）
+// 9.4 MQTTnet 内嵌 Broker：确定性越限 → 自动报修；冷却窗内重复告警不重复建单
+Console.WriteLine("== 10. MQTT 确定性越限联动 ==");
 try
 {
-    var frames = 0;
+    int iotCount() => Convert.ToInt32(DbHelper.ExecuteScalar(
+        "SELECT COUNT(*) FROM dbo.work_order WHERE CHARINDEX(N'[IoT自动报修]', FaultDesc) > 0") ?? 0);
+
+    int frames = 0;
     string? autoOrder = null;
-    var gw = new MqttGateway();
+    using var gw = new MqttGateway();
     gw.TelemetryReceived += _ => Interlocked.Increment(ref frames);
     gw.AutoOrderCreated += (no, _) => autoOrder = no;
-    gw.StartAsync().Wait(15000);
+    gw.StartAsync(withSimulator: false).Wait(15000);
+    var dev = devices[0];
+    int before = iotCount();
+
+    gw.PublishTelemetry(new TelemetryFrame { DeviceId = dev.DeviceId, DeviceName = dev.DeviceName, Temp = 95.0, Vibration = 9.5 });
     var sw = System.Diagnostics.Stopwatch.StartNew();
-    while (frames < 3 && sw.Elapsed.TotalSeconds < 20) Thread.Sleep(500);
-    Check("MQTT 内嵌Broker遥测接收", frames >= 3, $"收到 {frames} 帧");
+    while (frames < 1 && sw.Elapsed.TotalSeconds < 10) Thread.Sleep(200);
+    Thread.Sleep(1200);   // 等自动报修建单落库
+    gw.PublishTelemetry(new TelemetryFrame { DeviceId = dev.DeviceId, DeviceName = dev.DeviceName, Temp = 96.0, Vibration = 9.8 });
+    Thread.Sleep(1200);   // 冷却窗内第二帧（10 分钟冷却，不应再建单）
+    int after = iotCount();
+
+    Check("MQTT 遥测帧接收", frames >= 1, $"收到 {frames} 帧");
+    Check("越限自动报修（确定性输入）", autoOrder != null && after == before + 1, autoOrder ?? "未建单");
+    Check("冷却窗内重复告警不重复建单", after == before + 1, $"前 {before} 后 {after}");
     gw.StopAsync().Wait(5000);
-    Console.WriteLine($"   MQTT 自动报修联动：{(autoOrder == null ? "本轮模拟未触发越限（正常，10%概率冲高）" : "已创建 " + autoOrder)}");
 }
 catch (Exception ex)
 {

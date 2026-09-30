@@ -12,12 +12,21 @@ namespace IndustrialRepair.BLL;
 public class PickingService
 {
     private readonly PickingRepository _repo = new();
+    private readonly DAL.WorkOrderRepository _orders = new();
 
-    /// <summary>智能算料：根据工单设备 BOM×冗余系数自动生成领料清单</summary>
+    /// <summary>智能算料：根据工单设备 BOM×冗余系数自动生成领料清单（需登录 + picking.generate）</summary>
     public Result<int> Generate(int orderId, string operatorName, decimal redundancy)
     {
         if (redundancy < 1.0m || redundancy > 2.0m)
             return Result<int>.Fail("冗余系数应在 1.00 ~ 2.00 之间（任务书要求“留有一定冗余”）。");
+        var guard = Guard.Session("picking.generate");
+        if (!guard.Success) return Result<int>.Fail(guard.Message);
+        guard = Guard.SameOperator(operatorName);
+        if (!guard.Success) return Result<int>.Fail(guard.Message);
+        var order = _orders.GetById(orderId);
+        if (order == null) return Result<int>.Fail("工单不存在。");
+        guard = Guard.OrderOperator(order);   // 工程师限本人获派单；库管/管理员放行
+        if (!guard.Success) return Result<int>.Fail(guard.Message);
         try
         {
             var id = _repo.Generate(orderId, operatorName, redundancy);
@@ -27,9 +36,13 @@ public class PickingService
         catch (Exception ex) { return Result<int>.Fail(ex.Message); }
     }
 
-    /// <summary>领料出库（事务扣库存；库存不足自动回滚并给出缺口明细）</summary>
+    /// <summary>领料出库（事务扣库存；库存不足自动回滚并给出缺口明细；需 picking.issue）</summary>
     public Result Issue(int pickingId, string operatorName)
     {
+        var guard = Guard.Session("picking.issue");
+        if (!guard.Success) return guard;
+        guard = Guard.SameOperator(operatorName);
+        if (!guard.Success) return guard;
         try { _repo.Issue(pickingId, operatorName); return Result.Ok("出库成功，库存已扣减并写入流水。"); }
         catch (SqlException ex) { return Result.Fail(DbHelper.FriendlyError(ex)); }
         catch (Exception ex) { return Result.Fail(ex.Message); }

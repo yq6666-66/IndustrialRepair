@@ -5,8 +5,12 @@
         用户账号由客户端首次启动时用 bcrypt 哈希播种（见 BLL.DbSeeder）
 ==============================================================*/
 SET NOCOUNT ON;
+/* ===== MIGRATION-RUNNER:SKIP-START =====
+   托管执行（迁移运行器）时跳过本段：运行器已按目标库名建库；
+   独立 sqlcmd 执行时本段生效 */
 IF DB_ID(N'IndustrialRepairDb') IS NULL
     CREATE DATABASE IndustrialRepairDb;
+/* ===== MIGRATION-RUNNER:SKIP-END ===== */
 GO
 USE IndustrialRepairDb;
 GO
