@@ -17,6 +17,11 @@
     <PackageReference Include="ZXing.Net.Bindings.Windows.Compatibility" Version="0.16.16" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- BLL 使用 System.Drawing / SerialPort 等 Windows 专属 API（本系统仅面向 Windows） -->
+    <SupportedOSPlatform Include="windows" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
