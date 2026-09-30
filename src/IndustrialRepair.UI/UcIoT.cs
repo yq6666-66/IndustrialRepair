@@ -80,6 +80,7 @@ internal class UcIoT : UserControl, IRefreshable
         Controls.Add(split);
         Controls.Add(chartHost);
         Controls.Add(top);
+        Controls.Add(Ui.PageHeader("IoT · MQTT 遥测", "内嵌 Broker · 实时曲线 · 越限自动报修"));
 
         // 事件订阅（回调线程 → 封送 UI）
         _gw.StatusChanged += s => SafeRun(() => _lblStatus.Text = s);

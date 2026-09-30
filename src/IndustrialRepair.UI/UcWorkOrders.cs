@@ -23,7 +23,14 @@ internal class UcWorkOrders : UserControl, IRefreshable
     private readonly UITextBox _txtKey = Ui.Txt("工单号 / 设备 / 描述 / 报修人", 80, 12, 220);
     private readonly UIComboBox _cmbStatus = Ui.Combo(320, 12, 130);
     private readonly UICheckBox _chkMine = new() { Text = "仅我的", Location = new Point(470, 15), Size = new Size(70, 26) };
-    private readonly UIDataGridView _grid = Ui.Grid(10, 54, 1160, 620);
+    private readonly UIDataGridView _grid = FillGrid();
+
+    private static UIDataGridView FillGrid()
+    {
+        var g = Ui.Grid(0, 0, 100, 100);
+        g.Dock = DockStyle.Fill;
+        return g;
+    }
     private readonly UserRepository _users = new();
 
     public UcWorkOrders(UserInfo user)
@@ -50,11 +57,20 @@ internal class UcWorkOrders : UserControl, IRefreshable
         btnTake.Visible = _user.HasPerm("order.handle");
         btnFinish.Visible = _user.HasPerm("order.handle");
 
-        Controls.AddRange(new Control[]
+        var toolbar = new Panel { Dock = DockStyle.Top, Height = 54 };
+        toolbar.Controls.AddRange(new Control[]
         {
             Ui.Lbl("筛选：", 4, 14, 70), _txtKey, _cmbStatus, _chkMine,
-            btnQuery, btnNew, btnAssign, btnTake, btnFinish, btnDetail, btnCancel, _grid
+            btnQuery, btnNew, btnAssign, btnTake, btnFinish, btnDetail, btnCancel
         });
+
+        // Dock 布局（同 FMain 模式）：填充控件先加，标题条最后加
+        Controls.Add(_grid);
+        Controls.Add(toolbar);
+        Controls.Add(Ui.PageHeader("工单中心", "报修 · 派单 · 接单 · 完工 · 材料审阅入口"));
+
+        Ui.BindEnter(_txtKey, RefreshData);          // 回车即查
+        Ui.BindRowDblClick(_grid, _ => ShowDetail()); // 行双击=详情（与按钮同一入口）
     }
 
     private static readonly Dictionary<string, string> StatusMap = new()

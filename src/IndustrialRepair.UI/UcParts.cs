@@ -17,27 +17,37 @@ internal class UcParts : UserControl, IRefreshable
 {
     private readonly PartService _svc = new();
     private readonly UITextBox _txtKey = Ui.Txt("编码 / 名称 / 规格 模糊搜索", 90, 12, 220);
-    private readonly UIComboBox _cmbCat = Ui.Combo(320, 12, 140);
-    private readonly UIDataGridView _grid = Ui.Grid(10, 54, 1160, 620);
+    private readonly UIComboBox _cmbCat = Ui.Combo(400, 12, 140);
+    private readonly UIDataGridView _grid = MakeFillGrid();
+
+    private static UIDataGridView MakeFillGrid()
+    {
+        var g = Ui.Grid(0, 0, 100, 100);
+        g.Dock = DockStyle.Fill;
+        return g;
+    }
     private List<Part> _current = new();
+    /// <summary>当前是否为配件列表模式（库存预警/流水视图下禁用行双击编辑）</summary>
+    private bool _listMode = true;
 
     public UcParts()
     {
-        var btnQuery = Ui.Btn("查询", 480, 10, 80, 32, (_, _) => RefreshData());
-        var btnAdd = Ui.Btn("新增", 580, 10, 80, 32, (_, _) => EditPart(null));
-        var btnEdit = Ui.Btn("编辑", 670, 10, 80, 32, (_, _) =>
+        // 工具栏两行：检索+维护 / 库存+导出（分行消除按钮重叠；相对工具栏坐标）
+        var btnQuery = Ui.Btn("查询", 560, 10, 80, 32, (_, _) => RefreshData());
+        var btnAdd = Ui.Btn("新增", 660, 10, 80, 32, (_, _) => EditPart(null));
+        var btnEdit = Ui.Btn("编辑", 750, 10, 80, 32, (_, _) =>
         {
             var p = Selected(); if (p == null) return;
             EditPart(p);
         });
-        var btnDel = Ui.Btn("删除", 760, 10, 80, 32, (_, _) =>
+        var btnDel = Ui.Btn("删除", 840, 10, 80, 32, (_, _) =>
         {
             var p = Selected(); if (p == null) return;
             if (!Ui.Ask($"确认删除配件「{p.PartName}」？")) return;
             var r = _svc.Delete(p.PartId);
             if (r.Success) { Ui.Info(r.Message); RefreshData(); } else Ui.Error(r.Message);
         });
-        var btnIn = Ui.Btn("入库", 860, 10, 80, 32, (_, _) =>
+        var btnIn = Ui.Btn("入库", 10, 46, 80, 32, (_, _) =>
         {
             var p = Selected(); if (p == null) return;
             var qty = Ui.Input("配件入库", $"「{p.PartName}」入库数量：");
@@ -45,27 +55,44 @@ internal class UcParts : UserControl, IRefreshable
             var r = _svc.StockIn(p.PartId, n, $"IN-{DateTime.Now:HHmmss}");
             if (r.Success) { Ui.Info(r.Message); RefreshData(); } else Ui.Error(r.Message);
         });
-        var btnLow = Ui.Btn("库存预警", 780, 10, 80, 32, (_, _) => { _txtKey.Text = ""; _cmbCat.SelectedIndex = 0; ShowLow(); });
-        var btnLog = Ui.Btn("库存流水", 870, 10, 80, 32, (_, _) =>
+        var btnLow = Ui.Btn("库存预警", 100, 46, 90, 32, (_, _) => { _txtKey.Text = ""; _cmbCat.SelectedIndex = 0; ShowLow(); });
+        var btnLog = Ui.Btn("库存流水", 200, 46, 90, 32, (_, _) =>
         {
             var p = Selected();
+            _listMode = false;
             _grid.DataSource = _svc.StockLogs(p?.PartId ?? 0);
             RenameColumns();
         });
-        var btnQr = Ui.Btn("生成二维码", 960, 10, 95, 32, OnGenerateQr);
-        var btnXls = Ui.Btn("导出Excel", 1065, 10, 85, 32, OnExportExcel);
+        var btnQr = Ui.Btn("生成二维码", 300, 46, 100, 32, OnGenerateQr);
+        var btnXls = Ui.Btn("导出Excel", 410, 46, 90, 32, OnExportExcel);
 
-        Controls.AddRange(new Control[]
+        var toolbar = new Panel { Dock = DockStyle.Top, Height = 84 };
+        toolbar.Controls.AddRange(new Control[]
         {
-            Ui.Lbl("关键字：", 4, 14, 80), _txtKey, Ui.Lbl("类别：", 480 - 166, 14, 40) , _cmbCat,
-            btnQuery, btnAdd, btnEdit, btnDel, btnIn, btnLow, btnLog, btnQr, btnXls, _grid
+            Ui.Lbl("关键字：", 4, 14, 80), _txtKey, Ui.Lbl("类别：", 346, 14, 48), _cmbCat,
+            btnQuery, btnAdd, btnEdit, btnDel, btnIn, btnLow, btnLog, btnQr, btnXls
         });
+
+        // Dock 布局（同 FMain 模式）：填充控件先加，标题条最后加
+        Controls.Add(_grid);
+        Controls.Add(toolbar);
+        Controls.Add(Ui.PageHeader("备件库管理", "检索 · 维护 · 入库 · 预警 · 流水 · 二维码 · Excel"));
+
+        Ui.BindEnter(_txtKey, RefreshData);                     // 回车即查（抑制提示音）
+        Ui.BindRowDblClick(_grid, _ =>                          // 双击=编辑（仅配件列表模式）
+        {
+            if (!_listMode) return;
+            var p = Selected(); if (p == null) return;
+            EditPart(p);
+        });
+
         Load += (_, _) =>
         {
             _cmbCat.Items.Add("全部类别");
             foreach (var c in _svc.Categories()) _cmbCat.Items.Add(c.CategoryName);
             _cmbCat.SelectedIndex = 0;
         };
+        RefreshData();
     }
 
     private Part? Selected() =>
@@ -75,6 +102,7 @@ internal class UcParts : UserControl, IRefreshable
     {
         try
         {
+            _listMode = true;
             int? cat = null;
             if (_cmbCat.SelectedIndex > 0)
                 cat = _svc.Categories().FirstOrDefault(c => c.CategoryName == _cmbCat.Text)?.CategoryId;
@@ -88,6 +116,7 @@ internal class UcParts : UserControl, IRefreshable
 
     private void ShowLow()
     {
+        _listMode = false;
         _grid.DataSource = _svc.LowStock();
         RenameColumns();
     }

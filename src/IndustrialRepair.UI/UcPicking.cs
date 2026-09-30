@@ -20,11 +20,18 @@ internal class UcPicking : UserControl, IRefreshable
     private readonly WorkOrderService _orders = new();
     private readonly UserInfo _user;
     private readonly UIComboBox _cmbStatus = Ui.Combo(90, 12, 130);
-    private readonly UIDataGridView _grid = Ui.Grid(10, 54, 1160, 320);
-    private readonly UIDataGridView _items = Ui.Grid(10, 400, 1160, 280);
+    private readonly UIDataGridView _grid = FillGrid();
+    private readonly UIDataGridView _items = FillGrid();
+
+    private static UIDataGridView FillGrid()
+    {
+        var g = Ui.Grid(0, 0, 100, 100);
+        g.Dock = DockStyle.Fill;
+        return g;
+    }
     private readonly UILabel _lblSummary = new()
     {
-        Location = new Point(10, 690), Size = new Size(1160, 26), AutoSize = false,
+        Dock = DockStyle.Bottom, Height = 26,
         Font = new Font("微软雅黑", 9.5F, FontStyle.Bold), ForeColor = Color.FromArgb(0, 122, 204), Text = ""
     };
 
@@ -48,14 +55,35 @@ internal class UcPicking : UserControl, IRefreshable
         btnGen.Visible = _user.HasPerm("picking.generate");
         btnIssue.Visible = _user.HasPerm("picking.issue");
 
-        var lblItems = new UILabel
-        { Text = "领料明细", Location = new Point(10, 380), Size = new Size(200, 22), Font = new Font("微软雅黑", 10F, FontStyle.Bold) };
-
-        Controls.AddRange(new Control[]
+        var toolbar = new Panel { Dock = DockStyle.Top, Height = 54 };
+        toolbar.Controls.AddRange(new Control[]
         {
-            Ui.Lbl("状态：", 10, 14, 76), _cmbStatus, btnQuery, btnGen, btnIssue, btnExport, lblHint,
-            _grid, lblItems, _items, _lblSummary
+            Ui.Lbl("状态：", 10, 14, 76), _cmbStatus, btnQuery, btnGen, btnIssue, btnExport, lblHint
         });
+
+        // 上：领料单列表；下：明细 + 汇总（水平 SplitContainer 消除锚点互挤）
+        var top = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 0, 0, 4) };
+        top.Controls.Add(_grid);
+        var bottom = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 4, 0, 0) };
+        bottom.Controls.Add(_lblSummary);
+        bottom.Controls.Add(_items);
+        var lblItems = new UILabel
+        {
+            Text = "领料明细（选中上方领料单后加载）", Dock = DockStyle.Top, Height = 24,
+            Font = new Font("微软雅黑", 9.5F, FontStyle.Bold)
+        };
+        bottom.Controls.Add(lblItems);
+
+        var split = new SplitContainer
+        { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 320, FixedPanel = FixedPanel.None };
+        split.Panel1.Controls.Add(top);
+        split.Panel2.Controls.Add(bottom);
+
+        Controls.Add(split);
+        Controls.Add(toolbar);
+        Controls.Add(Ui.PageHeader("智能算料 · 领料", "整机 BOM × 冗余系数 · 事务出库 · Excel 导出"));
+
+        Ui.BindEnter(_cmbStatus, RefreshData);      // 状态筛选回车即查
         _grid.SelectionChanged += (_, _) => LoadItems();
     }
 

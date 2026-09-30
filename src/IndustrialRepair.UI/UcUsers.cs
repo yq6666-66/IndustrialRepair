@@ -43,6 +43,7 @@ internal class UcUsers : UserControl, IRefreshable
         _tabs.SelectedIndexChanged += (_, _) => RefreshData();
 
         Controls.Add(_tabs);
+        Controls.Add(Ui.PageHeader("用户与日志", "账号启停 · 角色 · MFA · 登录/操作审计"));
     }
 
     public void RefreshData()

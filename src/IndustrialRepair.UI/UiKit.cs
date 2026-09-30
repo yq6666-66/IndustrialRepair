@@ -76,6 +76,60 @@ internal static class Ui
     public static bool Ask(string msg) =>
         MessageBox.Show(msg, "确认", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
 
+    /// <summary>页面标题条（浅灰底 + 左侧品牌竖线），Dock 到页面顶部。</summary>
+    public static Control PageHeader(string title, string subtitle = "")
+    {
+        var bar = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = Color.FromArgb(243, 246, 250), Padding = new Padding(12, 0, 8, 0) };
+        bar.Paint += (_, e) =>
+        {
+            using var accent = new SolidBrush(Color.FromArgb(41, 108, 202));
+            e.Graphics.FillRectangle(accent, 0, 8, 4, bar.Height - 16);
+        };
+        var l1 = new UILabel
+        {
+            Text = title, AutoSize = true, ForeColor = Color.FromArgb(32, 41, 56),
+            Font = new Font("微软雅黑", 11F, FontStyle.Bold), Location = new Point(8, 8)
+        };
+        bar.Controls.Add(l1);
+        if (!string.IsNullOrWhiteSpace(subtitle))
+        {
+            var l2 = new UILabel
+            {
+                Text = subtitle, AutoSize = true, ForeColor = Color.FromArgb(120, 132, 148),
+                Font = new Font("微软雅黑", 8.5F), Anchor = AnchorStyles.Top | AnchorStyles.Left,
+                Location = new Point(16 + (int)(title.Length * 16.5f) + 24, 13)
+            };
+            bar.Controls.Add(l2);
+        }
+        return bar;
+    }
+
+    /// <summary>回车触发一次查询（仅单行输入控件；抑制提示音）。</summary>
+    public static void BindEnter(Control input, Action query)
+    {
+        input.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode != Keys.Enter) return;
+            e.SuppressKeyPress = true;
+            query();
+        };
+    }
+
+    /// <summary>
+    /// 表格行双击触发操作：忽略表头、无行与共享行，回调取当前行；
+    /// 权限与取数仍走与按钮相同的入口（回调自行校验）。
+    /// </summary>
+    public static void BindRowDblClick(DataGridView grid, Action<DataGridViewRow> action)
+    {
+        grid.CellDoubleClick += (_, e) =>
+        {
+            if (e.RowIndex < 0) return;
+            var row = grid.Rows[e.RowIndex];
+            if (row.IsNewRow || row.DataBoundItem == null) return;
+            action(row);
+        };
+    }
+
     public static string? Input(string title, string label, string def = "")
     {
         var f = new UIForm { Text = title, ClientSize = new Size(360, 140), ShowTitle = false, StartPosition = FormStartPosition.CenterParent };
