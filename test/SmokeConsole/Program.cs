@@ -213,6 +213,7 @@ var rvBom = orderSvc.ReviewMaterials(new MaterialReviewRequest(orderId, Material
 Check("BomOnly 材料审阅", rvBom.Success, rvBom.Message);
 var gen = pick.Generate(orderId, engUser.UserName, 1.10m);
 Check("BOM×1.10 生成领料单", gen.Success, gen.Message);
+string? bomSnapshot = null;   // 历史快照基线：后续审阅变化不得改动已出库单
 if (gen.Success)
 {
     Check("未出库时重复算料被拦截", !pick.Generate(orderId, engUser.UserName, 1.10m).Success, "应阻止重复生成");
@@ -231,6 +232,7 @@ if (gen.Success)
     var snap = DbHelper.ExecuteScalar("SELECT ReviewSnapshot FROM dbo.picking_list WHERE PickingId=@Id",
         CommandType.Text, DbHelper.P("@Id", gen.Data))?.ToString();
     Check("领料单保存审阅快照", !string.IsNullOrEmpty(snap) && snap.Contains("BomOnly"), snap ?? "");
+    bomSnapshot = snap;   // 历史快照基线
 
     // 4.5 Pending 单存在时禁止更改审阅
     var lockRv = orderSvc.ReviewMaterials(new MaterialReviewRequest(orderId, MaterialReviewMode.BomOnly, null, null, "尝试更改"));
@@ -272,8 +274,11 @@ var extra = gen3.Success ? pick.Items(gen3.Data).FirstOrDefault(i => i.PartId ==
 Check("BOM外追加行 Qty=CEILING(1.5×1.10)=2", extra != null && extra.Qty == 2 && (extra.Remark ?? "").Contains("BOM外"),
       $"Qty={extra?.Qty.ToString() ?? "缺失"} {extra?.Remark}");
 
-// 4.9 审阅留痕
+// 4.9 审阅留痕 + 历史快照不变性（后续审阅变化不回写已出库单）
 Check("审阅流转记录≥3条(Review)", orderSvc.Records(orderId).Count(r => r.Action == "Review") >= 3);
+var snapStill = DbHelper.ExecuteScalar("SELECT ReviewSnapshot FROM dbo.picking_list WHERE PickingId=@Id",
+    CommandType.Text, DbHelper.P("@Id", gen.Data))?.ToString();
+Check("已出库单审阅快照保持不变", snapStill == bomSnapshot, "历史清单可解释（快照不随审阅变化）");
 
 Console.WriteLine("== 5. 完工与报表/大屏（工程师会话） ==");
 auth.Login("engineer", "123456");

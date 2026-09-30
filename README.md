@@ -16,9 +16,9 @@
 | 物联网 | SerialPort 串口 + 扫码模拟器；**MQTTnet 内嵌 Broker 遥测 + 超阈值自动报修（UcIoT 页）** |
 | AI 辅助 | ChatGPT 等 AI 工具辅助编码（任务书允许）；拍照识别 V2 = ZXing 二维码直达 + OpenCvSharp（CLAHE/轮廓圆度）×特征库融合 |
 
-### 直接使用的热门开源项目（详见 docs/GitHub开源参考.md）
+### 直接使用的热门开源项目（许可证以官方 NuGet 元数据为准，详见 docs/GitHub开源参考.md）
 
-SunnyUI（~4k★ MIT）· OpenCvSharp（~6.1k★ Apache-2.0）· QRCoder（~3.7k★ MIT）· ZXing.Net（~2.8k★ Apache-2.0）· ClosedXML（~4.6k★ MIT）· MQTTnet 4.3.7（~4k★ .NET 基金会 MIT）· BCrypt.Net-Next（MIT）
+SunnyUI 3.9.8（**GPL-3.0-only**，课堂教学/课设使用；注意其传染性——发布二进制需遵循 GPL）· OpenCvSharp（Apache-2.0）· QRCoder（MIT）· ZXing.Net（Apache-2.0）· ClosedXML（MIT）· MQTTnet 4.3.7（MIT）· BCrypt.Net-Next（MIT）· xunit / Microsoft.NET.Test.Sdk（Apache-2.0）
 
 ## 快速开始
 
@@ -124,14 +124,26 @@ IndustrialRepair/
 
 ## 已验证
 
-- `dotnet build`：0 错误 0 警告
-- `dotnet test tests/IndustrialRepair.Tests`：18/18（BOM 算料纯函数 12 项 / 口令哈希 3 项 / 扫码协议 6 项）
-- `dotnet run --project test/SmokeConsole`：35/35 断言通过（认证/RBAC/工单/算料/出库/报表/大屏/串口解析/会话 + QRCoder↔ZXing 二维码回环 / OpenCV 原生库识别 / ClosedXML 导出 / MQTT 内嵌 Broker 收发 / **C# 算料 ↔ 存储过程一致性**）
-- SQL 冒烟：`sqlcmd -i db/03_smoke_test.sql`（报修→派单→接单→算料→出库→完工→报表→自清理）
+- `dotnet build -m:1`：0 错误 0 警告（解决方案含 UI/BLL/DAL/Models、tests/IndustrialRepair.Tests、test/SmokeConsole、test/RecognizeEval）
+- `dotnet test tests/IndustrialRepair.Tests`：**32/32**（BOM 算料 10 / 口令哈希 3 / 扫码协议 5 / 候选规整 4 / CSV 转义 7 / 评测统计 3）
+- `dotnet run --project test/SmokeConsole -- --conn="<测试库连接串>"`：**58/58**（迁移+结构校验、认证/RBAC、工单全流程含服务层越权拒绝、触发器审计、材料审阅全场景[BomOnly/快照/禁改/BOM内★/BOM外补量/留痕/快照不变性]、C#↔存储过程算料一致、并发出库恰好一次、大屏/报表/串口、QRCoder↔ZXing 回环、OpenCV、ClosedXML、MQTT 确定性越限+冷却）
+  - 冒烟含写操作，必须显式 `--conn=` 指向**独立测试库**（如 `IndustrialRepair_Test_R4`），指向业务库 `IndustrialRepairDb` 时拒绝启动；`--ensure-structure` 模式可用于升级演练；`--diag-script=` 逐批定位脚本错误
+- 数据库升级（M0 机制）：空库初始化、旧库升级（备份恢复演练：版本 2 + 13 工单保留）、重复启动幂等、故意失败批次整体回滚
+- AI 评测工具 `test/RecognizeEval`：`--mode=qr` 扫码回环 4/4；`--mode=visual` 输出 Top1/Top3/未匹配/负样本错误接受/混淆矩阵（合成图实测 Top1 0/3——如实呈现当前特征库引擎局限，真实外观效果待独立真实图集评测）
+
+## 当前边界与如实说明（验收口径）
+
+- **MFA/找回密码为演示流程**：邮箱验证码在界面直接显示，未接入真实 SMTP；报告与演示按“模拟邮箱通道”表述
+- **识别 Score 是匹配分数**（颜色/形状/尺寸相似度加权），不是校准后的正确概率；低分（<60）仅作人工核对提示
+- **未实测项**：真实扫码枪、山海鲸实际大屏（可用大屏页“导出CSV”作数据源）、课程识别模型效果——均标注“待实物/待模型验证”，未用模拟冒充
+- **整机 BOM 配料语义**（用户已确认）：算料生成整台设备 BOM；人工确认仅标记维修重点（BOM 内★标记不改数量，BOM 外按人工用量×冗余追加）；生成领料前必须完成材料审阅
+- 权限双层：界面按钮显隐 + **服务层会话/权限/获派校验**（越权直接调用服务被拒绝，冒烟有断言）
 
 ## 架构约定（对照《项目级代码规范》，详见 docs/代码规范符合性说明.md）
 
-- **接口隔离**：`IImageRecognizer` 隔离识别引擎（课程模型到位后同接口替换，UI 零改动）；`IScannerInput` 隔离扫码源——真实串口（SerialScannerInput）/ 无硬件模拟器（SimulatedScannerInput）/ 图片扫码 / 手动录入共用同一条「编码→配件查询」流程
-- **BOM 纯函数**：`BomCalculator.Calculate`（decimal、Ceiling、可选最小领用量/步长）可独立单元测试；存储过程 `usp_GeneratePicking` 仍是事务写入权威路径，一致性由冒烟断言保证
-- **识别留痕**：拍照识别 Top3 候选随工单写入 `Recognized`，<60% 置信度明确标注「需人工确认」
-- **大屏数据源**：可视化大屏页「导出CSV」按钮产出 UTF-8 BOM 的统计数据，供山海鲸等外部大屏工具批量导入（课程提供数据库连接后可升级为实时源）
+- **版本化数据库迁移**（dbo.schema_version）：基线(01)→材料审阅(04) 逐版本事务执行，失败整体回滚可重试；02_procs 按文件 SHA-256 增量刷新（CREATE OR ALTER）；启动仅结构检查，播种只走「一键初始化」
+- **写入加固**：单号 sp_getapplock 串行分配；算料/出库 UPDLOCK 行锁 + 一工单一张 Pending 单唯一过滤索引（并发只成功一次）；CHECK 约束（预检旧数据）；工单触发器只记真实新增与状态变化
+- **材料审阅闭环**（M1）：识别候选 JSON 留痕 → 工程师确认重点零件或 BomOnly → 算料闸门（未审阅拒算）→ 快照随领料单固化（历史清单可解释）
+- **接口隔离**：`IImageRecognizer`（课程模型同接口替换）/ `IScannerInput`（串口/模拟器/图片/手动同流程）；照片一次准备（压缩+识别）贯穿预览与提交
+- **服务层守卫**：会话 + 权限 + 操作者一致 + 工程师限获派单（界面显隐之外的第二层）
+- **测试隔离**：冒烟/评测工具必须显式 `--conn` 指向独立测试库，业务库拒绝写入型测试

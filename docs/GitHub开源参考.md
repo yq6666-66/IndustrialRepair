@@ -6,7 +6,7 @@
 
 | # | 开源项目 | 仓库 | 热度 | 协议 | 版本 | 本项目用途 |
 |---|---|---|---|---|---|---|
-| 1 | **SunnyUI** | [yhuse/SunnyUI](https://github.com/yhuse/SunnyUI) | ~4.0k★ GVP | MIT | 3.9.8 | 全套界面控件与图表（UIForm/UIButton/UIDataGridView/UIBarChart/UILineChart），登录/主框架/大屏/各业务页 |
+| 1 | **SunnyUI** | [yhuse/SunnyUI](https://github.com/yhuse/SunnyUI) | ~4.0k★ GVP | **GPL-3.0-only**（以官方 NuGet 包元数据为准；此前误标 MIT 已纠正） | 3.9.8 | 全套界面控件与图表（UIForm/UIButton/UIDataGridView/UIBarChart/UILineChart），登录/主框架/大屏/各业务页 |
 | 2 | **OpenCvSharp** | [shimat/opencvsharp](https://github.com/shimat/opencvsharp) | ~6.1k★ | Apache-2.0 | 4.13.x | 拍照识别引擎 V2：CLAHE 自适应增强、中心 ROI 均值色、Canny 边缘 + 最大轮廓圆度（4πA/P²）判形状、轮廓面积占比判尺寸 |
 | 3 | **QRCoder** | [codebude/QRCoder](https://github.com/codebude/QRCoder) | ~3.7k★ | MIT | 最新 | 配件二维码标签生成（内容 `PART:编码`，含名称文字的标签图，可另存/批量打印） |
 | 4 | **ZXing.Net** | [micjahn/ZXing.Net](https://github.com/micjahn/ZXing.Net) | ~2.8k★ | Apache-2.0 | 最新 | 二维码/条码解码：报修照片含码直接命中配件（置信 100%）；串口页「从图片扫码」 |
