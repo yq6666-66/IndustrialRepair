@@ -38,22 +38,24 @@ public class FMain : UIForm
         WindowState = FormWindowState.Maximized;
 
         // ---- 顶部标题栏：标题 + 当前模块 + 用户区（右侧自适应窗口宽度） ----
-        var header = new UIPanel { Dock = DockStyle.Top, Height = 64, FillColor = Color.FromArgb(41, 108, 202) };
+        // 用普通 Panel 而非 UIPanel：SunnyUI UILabel 在 UIPanel 上底色会发白（导航/状态栏所在普通 Panel 无此问题）
+        var header = new Panel { Dock = DockStyle.Top, Height = 64, BackColor = Color.FromArgb(41, 108, 202) };
         var title = new UILabel
         {
-            Text = "工业维修智能化零件分配平台", ForeColor = Color.White,
+            Text = "工业维修智能化零件分配平台", ForeColor = Color.White, BackColor = Color.Transparent,
             Font = new Font("微软雅黑", 13F, FontStyle.Bold),
             Location = new Point(18, 18), Size = new Size(360, 30), AutoSize = false
         };
         _lblPage = new UILabel
         {
-            ForeColor = Color.FromArgb(205, 226, 255), Font = new Font("微软雅黑", 10.5F),
+            ForeColor = Color.FromArgb(205, 226, 255), BackColor = Color.Transparent,
+            Font = new Font("微软雅黑", 10.5F),
             Location = new Point(388, 21), Size = new Size(340, 24), AutoSize = false
         };
         _lblUser = new UILabel
         {
             Text = $"{user.RealName}（{user.RoleName}）  ·  权限 {user.Permissions.Count} 项",
-            ForeColor = Color.White, Font = new Font("微软雅黑", 9.5F),
+            ForeColor = Color.White, BackColor = Color.Transparent, Font = new Font("微软雅黑", 9.5F),
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
             Location = new Point(ClientSize.Width - 480, 20), Size = new Size(280, 24),
             AutoSize = false, TextAlign = ContentAlignment.MiddleRight

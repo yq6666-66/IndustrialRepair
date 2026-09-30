@@ -33,7 +33,7 @@ public class PickingRepository
         return DbHelper.GetTable(
             @"SELECT PickingId,PickingNo,OrderNo,DeviceName,GeneratedBy,Redundancy,TotalAmount,Status,CreatedAt,IssuedAt,OrderId
               FROM dbo.vw_PickingDetail
-              WHERE (@ST IS NULL OR PickingStatus=@ST)
+              WHERE (@ST IS NULL OR Status=@ST)
                 AND (@KW IS NULL OR PickingNo LIKE @KWL OR OrderNo LIKE @KWL)
               ORDER BY PickingId DESC",
             CommandType.Text,

@@ -55,7 +55,7 @@ public class WorkOrderRepository
     public DataTable Query(string? status, string? keyword, int? userId, bool onlyMine)
     {
         return DbHelper.GetTable(
-            @"SELECT OrderId,OrderNo,Status,Priority,FaultType,FaultDesc,DeviceCode,DeviceName,Location,
+            @"SELECT OrderId,OrderNo,Status,Priority,FaultType,FaultDesc,DeviceCode,DeviceName,
                      ReporterName,EngineerName,CreatedAt,AssignTime,FinishTime,PhotoPath,Recognized,RepairSummary
               FROM dbo.vw_WorkOrder_Full
               WHERE (@ST IS NULL OR Status=@ST)
@@ -72,7 +72,7 @@ public class WorkOrderRepository
     public WorkOrder? GetById(int orderId)
     {
         var t = DbHelper.GetTable(
-            @"SELECT OrderId,OrderNo,Status,Priority,FaultType,FaultDesc,DeviceCode,DeviceName,Location,
+            @"SELECT OrderId,OrderNo,Status,Priority,FaultType,FaultDesc,DeviceCode,DeviceName,
                      ReporterName,EngineerName,CreatedAt,AssignTime,StartTime,FinishTime,PhotoPath,Recognized,RepairSummary
               FROM dbo.vw_WorkOrder_Full WHERE OrderId=@Id", CommandType.Text, DbHelper.P("@Id", orderId));
         if (t.Rows.Count == 0) return null;
@@ -84,7 +84,6 @@ public class WorkOrderRepository
             FaultType = r["FaultType"] == DBNull.Value ? null : r["FaultType"].ToString(),
             FaultDesc = r["FaultDesc"].ToString()!, DeviceCode = r["DeviceCode"].ToString()!,
             DeviceName = r["DeviceName"].ToString()!,
-            Location = r["Location"] == DBNull.Value ? null : r["Location"].ToString(),
             ReporterName = r["ReporterName"].ToString()!,
             EngineerName = r["EngineerName"] == DBNull.Value ? null : r["EngineerName"].ToString(),
             CreatedAt = (DateTime)r["CreatedAt"],

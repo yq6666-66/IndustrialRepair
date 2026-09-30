@@ -43,6 +43,8 @@ Check("工程师账号存在", engineers.Count > 0);
 var engineer = engineers[0];
 Check("派单", orderSvc.Assign(orderId, engineer.UserId, reporter.UserId).Success);
 Check("接单", orderSvc.Take(orderId, engineer.UserId).Success);
+Check("工单综合查询(工单中心列表SQL)", orderSvc.Query(null, null, null, false).Rows.Count > 0);
+Check("工单状态过滤(Working)", orderSvc.Query("Working", null, null, false).Rows.Count >= 1);
 
 Console.WriteLine("== 4. 智能算料与领料出库 ==");
 var pick = new PickingService();
@@ -56,6 +58,7 @@ if (gen.Success)
     Console.WriteLine("   明细：" + string.Join("；", items.Select(i => $"{i.PartName}×{i.Qty}={i.Amount:F2}")));
     var issue = pick.Issue(gen.Data, engineer.UserName);
     Check("领料出库(事务扣库存)", issue.Success, issue.Message);
+    Check("领料单列表查询(领料页列表SQL)", pick.List(null, null).Rows.Count >= 1);
 }
 
 Console.WriteLine("== 5. 完工与报表/大屏 ==");

@@ -263,7 +263,7 @@ internal class FOrderDetail : UIForm
         var info = new UILabel
         {
             Location = new Point(16, 16), Size = new Size(460, 210), AutoSize = false,
-            Text = $"工单号：{o.OrderNo}\n设备：{o.DeviceCode} {o.DeviceName}（{o.Location}）\n" +
+            Text = $"工单号：{o.OrderNo}\n设备：{o.DeviceCode} {o.DeviceName}\n" +
                    $"状态：{OrderStatusCode.ToChinese(o.Status)}   优先级：{PriorityCode.ToChinese(o.Priority)}\n" +
                    $"报修人：{o.ReporterName}   工程师：{o.EngineerName ?? "-"}\n" +
                    $"报修时间：{o.CreatedAt:yyyy-MM-dd HH:mm}\n" +
