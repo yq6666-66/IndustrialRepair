@@ -1,5 +1,6 @@
 // 无界面端到端冒烟测试：初始化 → 登录 → 报修 → 派单 → 接单 → 算料 → 出库 → 完工 → 大屏/报表/串口解析。
 // 运行：dotnet run --project test/SmokeConsole
+using System.Data;
 using IndustrialRepair.BLL;
 using IndustrialRepair.DAL;
 using IndustrialRepair.Models;
@@ -59,6 +60,19 @@ if (gen.Success)
     var issue = pick.Issue(gen.Data, engineer.UserName);
     Check("领料出库(事务扣库存)", issue.Success, issue.Message);
     Check("领料单列表查询(领料页列表SQL)", pick.List(null, null).Rows.Count >= 1);
+
+    // C# 算料纯函数 ↔ 存储过程 一致性：BomCalculator(CEILING(QtyPer×冗余)) 必须与 picking_item 实际数量吻合
+    var devIdT = DbHelper.GetTable("SELECT DeviceId FROM dbo.work_order WHERE OrderId=@Id",
+        CommandType.Text, DbHelper.P("@Id", orderId));
+    var bomT = DbHelper.GetTable("SELECT PartId, QtyPer FROM dbo.bom WHERE DeviceId=@D",
+        CommandType.Text, DbHelper.P("@D", devIdT.Rows[0]["DeviceId"]));
+    var expected = BomCalculator.Calculate(
+        bomT.AsEnumerable().Select(r => new BomRule((int)r["PartId"], (decimal)r["QtyPer"])), 1.10m);
+    var actualQty = pick.Items(gen.Data).GroupBy(i => i.PartId)
+        .ToDictionary(g => g.Key, g => g.Sum(x => x.Qty));
+    bool parity = expected.Count == actualQty.Count &&
+                  expected.All(e => actualQty.TryGetValue(e.PartId, out var q) && q == (int)e.Qty);
+    Check("C#算料与存储过程数量一致", parity, $"BOM {expected.Count} 项");
 }
 
 Console.WriteLine("== 5. 完工与报表/大屏 ==");
