@@ -221,13 +221,24 @@ public class DashboardRow
     public int Val { get; set; }
 }
 
+/// <summary>识别来源（评测与留痕用；Score 是匹配分数，不是校准后的正确概率）</summary>
+public static class RecognizeSource
+{
+    public const string Barcode = "Barcode";   // ZXing 解码 PART: 编码直达
+    public const string OpenCv = "OpenCv";     // OpenCV 特征路径
+    public const string Legacy = "Legacy";     // 纯托管降级路径
+    public const string Unmatched = "Unmatched";
+}
+
 /// <summary>拍照识别结果</summary>
 public class RecognizeResult
 {
     public int PartId { get; set; }
     public string PartCode { get; set; } = "";
     public string PartName { get; set; } = "";
-    /// <summary>0~100 置信度</summary>
+    /// <summary>匹配分数 0~100（颜色/形状/尺寸相似度加权，非概率）</summary>
     public int Score { get; set; }
     public string Reason { get; set; } = "";
+    /// <summary>候选来源：Barcode / OpenCv / Legacy / Unmatched（旧 JSON 可能缺省）</summary>
+    public string? Source { get; set; }
 }

@@ -23,14 +23,22 @@ public class WorkOrderService
 
     public List<Device> Devices(string? keyword = null) => _basic.ListDevices(keyword);
 
+    /// <summary>已准备照片：压缩落盘一次、识别一次；提交直接复用（同一文件与候选）。</summary>
+    public sealed record PreparedPhoto(string SavedPath, List<RecognizeResult> Candidates);
+
     /// <summary>
-    /// 创建报修工单：照片本地压缩保存 + 拍照识别（特征库匹配）+ 存储过程建单。
-    /// candidates 传入界面预览用过的识别候选（避免重复识别且与预览一致），
-    /// 原始候选全部随工单留痕：低置信度时明确标注"需人工确认"。
+    /// 照片准备：本地压缩保存（最长边 800 / JPEG 75）+ 识别一次。
+    /// 界面预览与提交共用结果；空候选也如实返回（提交时不再补识别）。
     /// </summary>
-    public Result<string> Report(int deviceId, int reporterId, string faultDesc, string faultType,
-                                 string priority, string? photoSourcePath,
-                                 IReadOnlyList<RecognizeResult>? candidates = null)
+    public PreparedPhoto PreparePhoto(string sourcePath)
+    {
+        var saved = ImageUtil.CompressSave(sourcePath, PhotoDir);
+        return new PreparedPhoto(saved, _recognizer.Recognize(saved));
+    }
+
+    /// <summary>提交报修：直接使用已准备照片与其候选（不重复压缩/识别，预览即提交依据）。</summary>
+    public Result<string> SubmitReport(int deviceId, int reporterId, string faultDesc, string faultType,
+                                       string priority, PreparedPhoto? photo)
     {
         if (deviceId <= 0) return Result<string>.Fail("请选择报修设备。");
         if (string.IsNullOrWhiteSpace(faultDesc)) return Result<string>.Fail("请填写故障描述。");
@@ -39,25 +47,50 @@ public class WorkOrderService
         guard = Guard.SameOperator(reporterId);
         if (!guard.Success) return Result<string>.Fail(guard.Message);
 
-        string? savedPath = null;
         string? recognized = null;
         string? recognizedJson = null;
         try
         {
-            if (!string.IsNullOrWhiteSpace(photoSourcePath) && File.Exists(photoSourcePath))
+            if (photo != null && File.Exists(photo.SavedPath))
             {
-                savedPath = ImageUtil.CompressSave(photoSourcePath, PhotoDir);   // 本地拍照压缩上传
-                var top = candidates is { Count: > 0 } ? candidates : _recognizer.Recognize(savedPath);
-                var best = top[0];
-                var candText = string.Join("，", top.Select(r => $"{r.PartName} {r.Score}%"));
-                recognized = (best.Score >= 60
-                        ? $"自动识别：{best.PartName}({best.PartCode}) 置信度{best.Score}%"
-                        : $"识别候选：{best.PartName}({best.PartCode}) 置信度{best.Score}%（低于60%需人工确认）")
-                    + $"｜候选：{candText}";
+                var top = photo.Candidates;
+                var best = top.Count > 0 ? top[0] : null;
+                recognized = best == null
+                    ? "识别未匹配（需人工确认）"
+                    : (best.Score >= 60
+                            ? $"自动识别：{best.PartName}({best.PartCode}) 匹配分数{best.Score}%"
+                            : $"识别候选：{best.PartName}({best.PartCode}) 匹配分数{best.Score}%（低于60需人工核对）")
+                      + $"｜候选：{string.Join("，", top.Select(r => $"{r.PartName} {r.Score}%"))}";
                 recognizedJson = SerializeCandidates(top);
             }
-            var orderNo = _orders.Create(deviceId, reporterId, faultDesc.Trim(), faultType, priority, savedPath, recognized, recognizedJson);
+            var orderNo = _orders.Create(deviceId, reporterId, faultDesc.Trim(), faultType, priority,
+                photo?.SavedPath, recognized, recognizedJson);
             return Result<string>.Ok(orderNo, $"报修成功，工单号 {orderNo}。");
+        }
+        catch (Exception ex)
+        {
+            return Result<string>.Fail(DbHelper.FriendlyError(ex));
+        }
+    }
+
+    /// <summary>
+    /// 兼容一步报修（准备+识别+提交）。界面路径请用 PreparePhoto/SubmitReport，
+    /// 保证同一照片只准备/识别一次。
+    /// </summary>
+    public Result<string> Report(int deviceId, int reporterId, string faultDesc, string faultType,
+                                 string priority, string? photoSourcePath,
+                                 IReadOnlyList<RecognizeResult>? candidates = null)
+    {
+        try
+        {
+            PreparedPhoto? photo = null;
+            if (!string.IsNullOrWhiteSpace(photoSourcePath) && File.Exists(photoSourcePath))
+            {
+                var saved = ImageUtil.CompressSave(photoSourcePath, PhotoDir);
+                photo = new PreparedPhoto(saved,
+                    candidates is { Count: > 0 } ? candidates.ToList() : _recognizer.Recognize(saved));
+            }
+            return SubmitReport(deviceId, reporterId, faultDesc, faultType, priority, photo);
         }
         catch (Exception ex)
         {

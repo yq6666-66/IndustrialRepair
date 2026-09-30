@@ -187,9 +187,10 @@ internal class FReportDialog : UIForm
         Location = new Point(410, 166), Size = new Size(300, 60), AutoSize = false,
         ForeColor = Color.FromArgb(0, 122, 204), Font = new Font("微软雅黑", 8.5F), Text = "拍照识别：等待图片…"
     };
-    private string? _photoPath;
-    private List<RecognizeResult>? _top3;    // 预览用过的识别候选，提交时随工单留痕
-    private readonly IImageRecognizer _recognizer = new RecognitionEngine();
+    private readonly UIButton btnPhoto;
+    private readonly UIButton btnClear;
+    private readonly UIButton btnOk;
+    private WorkOrderService.PreparedPhoto? _prepared;   // 一次准备（压缩+识别），提交直接复用
 
     public FReportDialog(UserInfo user)
     {
@@ -205,9 +206,15 @@ internal class FReportDialog : UIForm
         _cmbPriority.Items.AddRange(new object[] { "一般", "紧急", "严重", "特修" });
         _cmbPriority.SelectedIndex = 0;
 
-        var btnPhoto = Ui.Btn("拍照 / 选择照片", 410, 232, 140, 34, OnPickPhoto);
-        var btnClear = Ui.Btn("清除", 560, 232, 70, 34, (_, _) => { _photoPath = null; _top3 = null; _photo.Image = null; _lblRecog.Text = "拍照识别：等待图片…"; });
-        var btnOk = Ui.Btn("提交报修", 90, 270, 140, 36, OnSubmit);
+        btnPhoto = Ui.Btn("拍照 / 选择照片", 410, 232, 140, 34, OnPickPhoto);
+        btnClear = Ui.Btn("清除", 560, 232, 70, 34, (_, _) =>
+        {
+            _prepared = null;
+            _photo.Image?.Dispose();
+            _photo.Image = null;
+            _lblRecog.Text = "拍照识别：等待图片…";
+        });
+        btnOk = Ui.Btn("提交报修", 90, 270, 140, 36, OnSubmit);
         var btnBack = Ui.Btn("取消", 250, 270, 140, 36, (_, _) => Close());
 
         Controls.AddRange(new Control[]
@@ -219,21 +226,48 @@ internal class FReportDialog : UIForm
         });
     }
 
-    private void OnPickPhoto(object? s, EventArgs e)
+    /// <summary>
+    /// 选照片：一次准备（压缩落盘+识别）在后台线程完成，期间禁用重选/清除/提交，
+    /// 失败清空候选；窗体已关闭则不回写控件。提交直接复用准备结果（同一文件与候选）。
+    /// </summary>
+    private async void OnPickPhoto(object? s, EventArgs e)
     {
         using var ofd = new OpenFileDialog { Filter = "图片文件|*.jpg;*.jpeg;*.png;*.bmp", Title = "选择现场照片（拍照后选择）" };
         if (ofd.ShowDialog() != DialogResult.OK) return;
+
+        // 开始新处理：清空上一张的照片与候选（失败不得携带旧候选）
+        _prepared = null;
+        _photo.Image?.Dispose();
+        _photo.Image = null;
+        _lblRecog.Text = "照片准备中…（压缩与识别）";
+
+        var source = ofd.FileName;
+        var busy = new[] { btnPhoto, btnClear, btnOk };
+        foreach (var b in busy) b.Enabled = false;
         try
         {
-            _photoPath = ofd.FileName;
+            var prepared = await Task.Run(() => _svc.PreparePhoto(source));
+            if (IsDisposed) return;
+            _prepared = prepared;
             _photo.Image?.Dispose();
-            _photo.Image = Image.FromFile(ofd.FileName);
-            // 本地压缩保存后识别（与提交时一致：候选缓存后随工单留痕，不重复识别）
-            var saved = ImageUtil.CompressSave(ofd.FileName, WorkOrderService.PhotoDir);
-            _top3 = _recognizer.Recognize(saved);
-            _lblRecog.Text = "拍照识别 Top3：\n" + string.Join("\n", _top3.Select(r => $"{r.PartName} {r.Score}%"));
+            _photo.Image = Image.FromFile(prepared.SavedPath);
+            _lblRecog.Text = prepared.Candidates.Count == 0
+                ? "识别未匹配：需人工确认（可在工单详情中手动选择零件）"
+                : "拍照识别 Top3（匹配分数）：\n" + string.Join("\n",
+                      prepared.Candidates.Select(r => $"{r.PartName} {r.Score}%{(r.Score < 60 ? "（需人工核对）" : "")}"));
         }
-        catch (Exception ex) { Ui.Error("图片处理失败：" + ex.Message); }
+        catch (Exception ex)
+        {
+            if (IsDisposed) return;
+            _prepared = null;
+            _lblRecog.Text = "照片处理失败，请重选或清除。";
+            Ui.Error("图片处理失败：" + ex.Message);
+        }
+        finally
+        {
+            if (!IsDisposed)
+                foreach (var b in busy) b.Enabled = true;
+        }
     }
 
     private void OnSubmit(object? s, EventArgs e)
@@ -246,9 +280,9 @@ internal class FReportDialog : UIForm
             "紧急" => PriorityCode.Urgent, "严重" => PriorityCode.Critical,
             "特修" => PriorityCode.Special, _ => PriorityCode.Normal
         };
-        var r = _svc.Report(devices[idx].DeviceId, _user.UserId, _txtDesc.Text, _cmbType.Text, priority, _photoPath, _top3);
+        var r = _svc.SubmitReport(devices[idx].DeviceId, _user.UserId, _txtDesc.Text, _cmbType.Text, priority, _prepared);
         if (!r.Success) { Ui.Error(r.Message); return; }
-        Ui.Info(r.Message + (_photoPath == null ? "" : "\n照片已本地压缩保存。"));
+        Ui.Info(r.Message + (_prepared == null ? "" : "\n照片已本地压缩保存。"));
         DialogResult = DialogResult.OK;
         Close();
     }

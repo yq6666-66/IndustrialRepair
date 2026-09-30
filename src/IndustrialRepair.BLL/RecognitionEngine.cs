@@ -64,26 +64,35 @@ public class RecognitionEngine : IImageRecognizer
         }
     }
 
-    /// <summary>识别照片，返回 Top3 候选（二维码命中始终置顶）</summary>
-    public List<RecognizeResult> Recognize(string imagePath)
+    /// <summary>接口实现入口：生产识别（含二维码直达路径）。</summary>
+    public List<RecognizeResult> Recognize(string imagePath) => Recognize(imagePath, includeBarcode: true);
+
+    /// <summary>
+    /// 识别照片，返回 Top3 候选（二维码命中始终置顶）。
+    /// includeBarcode=false 供外观评测使用——照片内的条码/二维码不得作为分类答案。
+    /// </summary>
+    public List<RecognizeResult> Recognize(string imagePath, bool includeBarcode)
     {
         var results = new List<RecognizeResult>();
 
         // ① ZXing 二维码/条码直达
-        try
+        if (includeBarcode)
         {
-            var text = BarcodeUtil.Decode(imagePath);
-            var code = BarcodeUtil.ExtractPartCode(text);
-            if (code != null)
+            try
             {
-                var hit = _parts.Search(code).FirstOrDefault(p =>
-                    string.Equals(p.PartCode, code, StringComparison.OrdinalIgnoreCase));
-                results.Add(hit == null
-                    ? new RecognizeResult { Score = 90, PartCode = code, PartName = $"未登记编码 {code}", Reason = $"ZXing 解码：{text}（配件库无此编码）" }
-                    : new RecognizeResult { PartId = hit.PartId, PartCode = hit.PartCode, PartName = hit.PartName, Score = 100, Reason = $"ZXing 二维码解码命中：{text}" });
+                var text = BarcodeUtil.Decode(imagePath);
+                var code = BarcodeUtil.ExtractPartCode(text);
+                if (code != null)
+                {
+                    var hit = _parts.Search(code).FirstOrDefault(p =>
+                        string.Equals(p.PartCode, code, StringComparison.OrdinalIgnoreCase));
+                    results.Add(hit == null
+                        ? new RecognizeResult { Score = 90, PartCode = code, PartName = $"未登记编码 {code}", Source = RecognizeSource.Barcode, Reason = $"ZXing 解码：{text}（配件库无此编码）" }
+                        : new RecognizeResult { PartId = hit.PartId, PartCode = hit.PartCode, PartName = hit.PartName, Score = 100, Source = RecognizeSource.Barcode, Reason = $"ZXing 二维码解码命中：{text}" });
+                }
             }
+            catch { /* 解码失败继续视觉路径 */ }
         }
-        catch { /* 解码失败继续视觉路径 */ }
 
         // ② 提取视觉特征（OpenCV 优先，异常降级）
         var feat = ExtractWithOpenCv(imagePath) ?? ExtractLegacy(imagePath);
@@ -110,6 +119,7 @@ public class RecognitionEngine : IImageRecognizer
                 {
                     PartId = p.PartId, PartCode = p.Code, PartName = p.Name,
                     Score = Math.Clamp(total, 1, 98),
+                    Source = feat.FromOpenCv ? RecognizeSource.OpenCv : RecognizeSource.Legacy,
                     Reason = (feat.FromOpenCv ? "[OpenCV] " : "[规则] ") +
                              $"主色({feat.R:F0},{feat.G:F0},{feat.B:F0})↔库({p.R},{p.G},{p.B}) 距离{dist:F0}；" +
                              $"圆度{feat.Circularity:F2}→{shapeGuess}；轮廓占比{feat.AreaRatio:P0}→{sizeGuess}"
@@ -117,11 +127,24 @@ public class RecognitionEngine : IImageRecognizer
             }
         }
 
-        var top = results.OrderByDescending(r => r.Score).Take(3).ToList();
+        var top = Normalize(results);
         if (top.Count == 0)
-            top.Add(new RecognizeResult { Score = 0, PartName = "未匹配", Reason = "特征库为空或照片质量不足" });
+            top.Add(new RecognizeResult { Score = 0, PartName = "未匹配", Source = RecognizeSource.Unmatched, Reason = "特征库为空或照片质量不足" });
         return top;
     }
+
+    /// <summary>
+    /// 候选规整（生产与评测共用）：过滤无 PartId 的占位项 →
+    /// 按 PartCode 去重（同件保分高者）→ 分数降序、同分按编码升序（稳定）→ 取前 N。
+    /// </summary>
+    public static List<RecognizeResult> Normalize(IEnumerable<RecognizeResult> candidates, int take = 3) =>
+        candidates.Where(c => c.PartId > 0)
+                  .GroupBy(c => c.PartCode, StringComparer.OrdinalIgnoreCase)
+                  .Select(g => g.OrderByDescending(c => c.Score).First())
+                  .OrderByDescending(c => c.Score)
+                  .ThenBy(c => c.PartCode, StringComparer.OrdinalIgnoreCase)
+                  .Take(take)
+                  .ToList();
 
     /// <summary>OpenCV 路径：中心 ROI 均值色 + CLAHE/Canny 最大轮廓圆度与占比</summary>
     private static CvFeatures? ExtractWithOpenCv(string path)
