@@ -22,6 +22,7 @@ internal class UcPicking : UserControl, IRefreshable
     private readonly UIComboBox _cmbStatus = Ui.Combo(90, 12, 130);
     private readonly UIDataGridView _grid = FillGrid();
     private readonly UIDataGridView _items = FillGrid();
+    private readonly UiPager _pager = null!;
 
     private static UIDataGridView FillGrid()
     {
@@ -79,7 +80,9 @@ internal class UcPicking : UserControl, IRefreshable
         split.Panel1.Controls.Add(top);
         split.Panel2.Controls.Add(bottom);
 
+        _pager = new UiPager((page, size) => LoadPage(page, size));
         Controls.Add(split);
+        Controls.Add(_pager);
         Controls.Add(toolbar);
         Controls.Add(Ui.PageHeader("智能算料 · 领料", "整机 BOM × 冗余系数 · 事务出库 · Excel 导出"));
 
@@ -92,15 +95,24 @@ internal class UcPicking : UserControl, IRefreshable
         1 => PickingStatusCode.Pending, 2 => PickingStatusCode.Issued, _ => null
     };
 
-    public void RefreshData()
+    public void RefreshData() => LoadPage(_currentPage, _pageSize);
+
+    private int _currentPage = 1;
+    private int _pageSize = 50;
+
+    /// <summary>分页加载领料单主表（R1：OFFSET-FETCH）。</summary>
+    private void LoadPage(int page, int size)
     {
         try
         {
-            var t = _svc.List(StatusOf(_cmbStatus), null);
+            _currentPage = page; _pageSize = size;
+            var r = BLL.PagedQuery.Pickings(StatusOf(_cmbStatus), page, size);
+            var t = r.Items;
             if (t.Columns.Contains("Status")) t.Columns["Status"]!.ColumnName = "状态";
-            foreach (System.Data.DataRow r in t.Rows)
-                r["状态"] = PickingStatusCode.ToChinese(r["状态"].ToString()!);
+            foreach (System.Data.DataRow row in t.Rows)
+                row["状态"] = PickingStatusCode.ToChinese(row["状态"].ToString()!);
             _grid.DataSource = t;
+            _pager.Show(r);
             _lblSummary.Text = "";
             LoadItems();
         }

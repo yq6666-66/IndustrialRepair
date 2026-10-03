@@ -24,6 +24,7 @@ internal class UcWorkOrders : UserControl, IRefreshable
     private readonly UIComboBox _cmbStatus = Ui.Combo(320, 12, 130);
     private readonly UICheckBox _chkMine = new() { Text = "仅我的", Location = new Point(470, 15), Size = new Size(70, 26) };
     private readonly UIDataGridView _grid = FillGrid();
+    private readonly UiPager _pager = null!;   // 构造中初始化（需引用本页加载方法）
 
     private static UIDataGridView FillGrid()
     {
@@ -39,7 +40,7 @@ internal class UcWorkOrders : UserControl, IRefreshable
         _cmbStatus.Items.AddRange(new object[] { "全部状态", "待派单", "已派单", "维修中", "已完成", "已取消" });
         _cmbStatus.SelectedIndex = 0;
 
-        var btnQuery = Ui.Btn("查询", 550, 10, 80, 32, (_, _) => RefreshData());
+        var btnQuery = Ui.Btn("查询", 550, 10, 80, 32, (_, _) => LoadPage(1, _pageSize));
         var btnNew = Ui.Btn("新建报修", 650, 10, 95, 32, (_, _) =>
         {
             using var dlg = new FReportDialog(_user);
@@ -64,12 +65,14 @@ internal class UcWorkOrders : UserControl, IRefreshable
             btnQuery, btnNew, btnAssign, btnTake, btnFinish, btnDetail, btnCancel
         });
 
-        // Dock 布局（同 FMain 模式）：填充控件先加，标题条最后加
+        // Dock 布局（同 FMain 模式）：填充控件先加，标题条最后加；分页条在工具栏之下
+        _pager = new UiPager((page, size) => LoadPage(page, size));
         Controls.Add(_grid);
         Controls.Add(toolbar);
+        Controls.Add(_pager);
         Controls.Add(Ui.PageHeader("工单中心", "报修 · 派单 · 接单 · 完工 · 材料审阅入口"));
 
-        Ui.BindEnter(_txtKey, RefreshData);          // 回车即查
+        Ui.BindEnter(_txtKey, () => LoadPage(1, 50));   // 回车即查（回第一页）
         Ui.BindRowDblClick(_grid, _ => ShowDetail()); // 行双击=详情（与按钮同一入口）
     }
 
@@ -79,21 +82,37 @@ internal class UcWorkOrders : UserControl, IRefreshable
         { "已完成", "Done" }, { "已取消", "Cancelled" }
     };
 
-    public void RefreshData()
+    /// <summary>刷新当前页（IRefreshable / 查询按钮入口）。</summary>
+    public void RefreshData() => LoadPage(_currentPage, _pageSize);
+
+    private int _currentPage = 1;
+    private int _pageSize = 50;
+
+    /// <summary>分页加载工单列表（R1：OFFSET-FETCH，避免全量拉取）。</summary>
+    private void LoadPage(int page, int size)
     {
         try
         {
+            _currentPage = page; _pageSize = size;
             var status = _cmbStatus.SelectedIndex == 0 ? null : StatusMap[_cmbStatus.Text];
-            var t = _svc.Query(status, _txtKey.Text.Trim(), _user.UserId, _chkMine.Checked);
-            // 翻译显示列
+            var r = BLL.PagedQuery.WorkOrders(status, _txtKey.Text.Trim(), _chkMine.Checked, _user.UserId, page, size);
+            var t = r.Items;
             if (t.Columns.Contains("Status")) t.Columns["Status"]!.ColumnName = "状态";
             if (t.Columns.Contains("Priority")) t.Columns["Priority"]!.ColumnName = "优先级";
-            foreach (System.Data.DataRow r in t.Rows)
+            if (t.Columns.Contains("FaultDesc")) t.Columns["FaultDesc"]!.ColumnName = "故障描述";
+            if (t.Columns.Contains("MaterialReviewMode"))
             {
-                r["状态"] = OrderStatusCode.ToChinese(r["状态"].ToString()!);
-                r["优先级"] = PriorityCode.ToChinese(r["优先级"].ToString()!);
+                t.Columns["MaterialReviewMode"]!.ColumnName = "材料审阅";
+                foreach (System.Data.DataRow row in t.Rows)
+                    row["材料审阅"] = MaterialReviewMode.ToChinese(row["材料审阅"] == DBNull.Value ? null : row["材料审阅"].ToString());
+            }
+            foreach (System.Data.DataRow row in t.Rows)
+            {
+                row["状态"] = OrderStatusCode.ToChinese(row["状态"].ToString()!);
+                row["优先级"] = PriorityCode.ToChinese(row["优先级"].ToString()!);
             }
             _grid.DataSource = t;
+            _pager.Show(r);
         }
         catch (Exception ex) { Ui.Error(DbHelper.FriendlyError(ex)); }
     }

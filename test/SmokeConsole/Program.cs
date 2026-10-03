@@ -92,6 +92,26 @@ if (string.IsNullOrWhiteSpace(dbName) || dbName.Equals("IndustrialRepairDb", Str
 Db.UseConnectionString(testConn);
 Console.WriteLine($"▶ 冒烟测试库：{dbName}");
 
+// 库污染守卫：冒烟假定干净库（约定每次 DROP 重建）；残留大量业务数据时快速失败
+int existingOrders = 0;
+try
+{
+    new DbInitializer().EnsureStructure();
+    existingOrders = Convert.ToInt32(IndustrialRepair.DAL.DbHelper.ExecuteScalar("SELECT COUNT(*) FROM dbo.work_order") ?? 0);
+}
+catch (Exception ex)
+{
+    Console.Error.WriteLine("× 结构初始化失败：" + ex.Message);
+    return 1;
+}
+if (existingOrders > 20)
+{
+    Console.Error.WriteLine($"× 拒绝运行：库内已有 {existingOrders} 张工单（非干净库）。");
+    Console.Error.WriteLine("  冒烟假定每次 DROP 重建：sqlcmd -Q \"DROP DATABASE " + dbName + "\" 后重跑；");
+    Console.Error.WriteLine("  压测数据请用 test/SeedDemoData 建独立库。");
+    return 2;
+}
+
 int pass = 0, fail = 0;
 void Check(string name, bool ok, string detail = "")
 {
@@ -286,6 +306,18 @@ var done = orderSvc.Complete(orderId, AppSession.Current!.UserId, "冒烟测试�
 Check("完工登记", done.Success, done.Message);
 var records = orderSvc.Records(orderId);
 Check("流转记录完整(创建→派单→接单→完工)", records.Count >= 4, string.Join("→", records.Select(r => WorkOrderRecord.ToChinese(r.Action))));
+
+// 5.1 分页（R1）：总数一致、页大小约束、页间无重叠
+int allOrders = Convert.ToInt32(DbHelper.ExecuteScalar("SELECT COUNT(*) FROM dbo.work_order") ?? 0);
+var p1 = PagedQuery.WorkOrders(null, null, false, 0, 1, 5);
+var p2 = PagedQuery.WorkOrders(null, null, false, 0, 2, 5);
+Check("工单分页总数与库内一致", p1.TotalCount == allOrders, $"分页 {p1.TotalCount} / 库内 {allOrders}");
+Check("分页页大小约束(每页5条)", p1.Items.Rows.Count <= 5 && p1.Items.Rows.Count > 0, $"第1页 {p1.Items.Rows.Count} 行");
+var ids1 = p1.Items.AsEnumerable().Select(r => Convert.ToInt32(r["OrderId"])).ToHashSet();
+var ids2 = p2.Items.AsEnumerable().Select(r => Convert.ToInt32(r["OrderId"])).ToHashSet();
+Check("分页页间无重叠", !ids1.Overlaps(ids2) && (allOrders <= 5 || ids2.Count > 0), $"p1[{ids1.Count}] p2[{ids2.Count}]（库内 {allOrders} 条）");
+var pp = PagedQuery.Parts(null, null, 1, 3);
+Check("配件分页可用", pp.TotalCount >= 18 && pp.Items.Rows.Count <= 3, $"配件总数 {pp.TotalCount}");
 var dash = new DashboardService();
 var (today, pending, working, doneCnt, cost) = dash.Summary();
 Console.WriteLine($"   大屏汇总：今日{today} 待派{pending} 维修中{working} 已完成{doneCnt} 本月成本{cost}");

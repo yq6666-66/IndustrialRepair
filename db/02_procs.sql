@@ -111,17 +111,19 @@ BEGIN
     SET XACT_ABORT ON;
     BEGIN TRAN;
     BEGIN TRY
-        DECLARE @No NVARCHAR(30), @Seq INT, @lr INT, @Res NVARCHAR(60);
-        SET @Res = N'SEQ_WorkOrder_' + CONVERT(NVARCHAR(8), GETDATE(), 112);
+        DECLARE @No NVARCHAR(30), @Seq INT, @lr INT, @Res NVARCHAR(60), @Day NVARCHAR(8);
+        SET @Day = CONVERT(NVARCHAR(8), GETDATE(), 112);
+        SET @Res = N'SEQ_WorkOrder_' + @Day;
         EXEC @lr = dbo.sp_getapplock
              @Resource = @Res,
              @LockMode = N'Exclusive', @LockOwner = N'Transaction', @LockTimeout = 5000;
         IF @lr < 0 RAISERROR(N'工单号分配繁忙，请重试。', 16, 1);
 
-        SELECT @Seq = ISNULL(MAX(RIGHT(OrderNo, 4)), 0) + 1
+        -- 序列按单号前缀计数（含日期的单号天然按天分段，不受创建时间回写影响）
+        SELECT @Seq = ISNULL(MAX(CAST(RIGHT(OrderNo, 4) AS INT)), 0) + 1
           FROM dbo.work_order
-         WHERE CONVERT(NVARCHAR(8), CreatedAt, 112) = CONVERT(NVARCHAR(8), GETDATE(), 112);
-        SET @No = N'WO' + CONVERT(NVARCHAR(8), GETDATE(), 112) + RIGHT(N'000' + CAST(@Seq AS NVARCHAR(10)), 4);
+         WHERE OrderNo LIKE N'WO' + @Day + N'%';
+        SET @No = N'WO' + @Day + RIGHT(N'000' + CAST(@Seq AS NVARCHAR(10)), 4);
 
         INSERT INTO dbo.work_order(OrderNo, DeviceId, ReporterId, FaultDesc, FaultType, Priority,
                                    PhotoPath, Recognized, RecognizedJson, Status)
@@ -315,16 +317,18 @@ BEGIN
         IF EXISTS(SELECT 1 FROM dbo.picking_list WHERE OrderId = @OrderId AND Status = N'Pending')
             RAISERROR(N'算料失败：该工单已存在未出库的领料单。', 16, 1);
 
-        DECLARE @No NVARCHAR(30), @Seq INT, @lr INT, @Res NVARCHAR(60);
-        SET @Res = N'SEQ_Picking_' + CONVERT(NVARCHAR(8), GETDATE(), 112);
+        DECLARE @No NVARCHAR(30), @Seq INT, @lr INT, @Res NVARCHAR(60), @Day NVARCHAR(8);
+        SET @Day = CONVERT(NVARCHAR(8), GETDATE(), 112);
+        SET @Res = N'SEQ_Picking_' + @Day;
         EXEC @lr = dbo.sp_getapplock
              @Resource = @Res,
              @LockMode = N'Exclusive', @LockOwner = N'Transaction', @LockTimeout = 5000;
         IF @lr < 0 RAISERROR(N'领料单号分配繁忙，请重试。', 16, 1);
-        SELECT @Seq = ISNULL(MAX(RIGHT(PickingNo, 4)), 0) + 1
+        -- 序列按单号前缀计数（同工单单号规则，不受创建时间回写影响）
+        SELECT @Seq = ISNULL(MAX(CAST(RIGHT(PickingNo, 4) AS INT)), 0) + 1
           FROM dbo.picking_list
-         WHERE CONVERT(NVARCHAR(8), CreatedAt, 112) = CONVERT(NVARCHAR(8), GETDATE(), 112);
-        SET @No = N'PK' + CONVERT(NVARCHAR(8), GETDATE(), 112) + RIGHT(N'000' + CAST(@Seq AS NVARCHAR(10)), 4);
+         WHERE PickingNo LIKE N'PK' + @Day + N'%';
+        SET @No = N'PK' + @Day + RIGHT(N'000' + CAST(@Seq AS NVARCHAR(10)), 4);
 
         INSERT INTO dbo.picking_list(PickingNo, OrderId, GeneratedBy, Redundancy, ReviewSnapshot)
         VALUES(@No, @OrderId, @Operator, @Redundancy,
@@ -480,6 +484,86 @@ BEGIN
     UNION ALL
     SELECT N'库存预警', p.PartName, p.StockQty FROM dbo.part p
     WHERE p.StockQty < p.MinStock;
+END
+GO
+
+-- 10. 分页列表（R1 大数据量）：工单/配件/领料主表 OFFSET-FETCH 分页 + 条件总数
+CREATE OR ALTER PROCEDURE dbo.usp_ListWorkOrdersPaged
+    @Status     NVARCHAR(20) = NULL,
+    @Keyword    NVARCHAR(60) = NULL,
+    @OnlyMine   BIT = 0,
+    @Uid        INT = NULL,
+    @PageIndex  INT = 1,
+    @PageSize   INT = 50,
+    @TotalCount INT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Kwl NVARCHAR(62) = N'%' + ISNULL(@Keyword, N'') + N'%';
+    SELECT @TotalCount = COUNT(*)
+      FROM dbo.vw_WorkOrder_Full v
+     WHERE (@Status IS NULL OR v.Status = @Status)
+       AND (@Keyword IS NULL OR v.OrderNo LIKE @Kwl OR v.DeviceName LIKE @Kwl
+            OR v.FaultDesc LIKE @Kwl OR v.ReporterName LIKE @Kwl)
+       AND (@OnlyMine = 0 OR v.ReporterId = @Uid OR v.EngineerId = @Uid);
+
+    SELECT v.OrderId, v.OrderNo, v.Status, v.Priority, v.FaultType, v.FaultDesc,
+           v.DeviceCode, v.DeviceName, v.ReporterName, v.EngineerName,
+           v.CreatedAt, v.AssignTime, v.FinishTime, v.RepairSummary,
+           v.MaterialReviewMode, v.ConfirmedPartName
+      FROM dbo.vw_WorkOrder_Full v
+     WHERE (@Status IS NULL OR v.Status = @Status)
+       AND (@Keyword IS NULL OR v.OrderNo LIKE @Kwl OR v.DeviceName LIKE @Kwl
+            OR v.FaultDesc LIKE @Kwl OR v.ReporterName LIKE @Kwl)
+       AND (@OnlyMine = 0 OR v.ReporterId = @Uid OR v.EngineerId = @Uid)
+     ORDER BY v.OrderId DESC
+     OFFSET (@PageIndex - 1) * @PageSize ROWS FETCH NEXT @PageSize ROWS ONLY;
+END
+GO
+
+CREATE OR ALTER PROCEDURE dbo.usp_ListPartsPaged
+    @Keyword    NVARCHAR(60) = NULL,
+    @CategoryId INT = NULL,
+    @PageIndex  INT = 1,
+    @PageSize   INT = 50,
+    @TotalCount INT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Kwl NVARCHAR(62) = N'%' + ISNULL(@Keyword, N'') + N'%';
+    SELECT @TotalCount = COUNT(*)
+      FROM dbo.part p
+     WHERE (@CategoryId IS NULL OR p.CategoryId = @CategoryId)
+       AND (@Keyword IS NULL OR p.PartCode LIKE @Kwl OR p.PartName LIKE @Kwl OR p.Spec LIKE @Kwl);
+    SELECT p.PartId, p.PartCode, p.PartName, p.CategoryId, c.CategoryName, p.Spec, p.Unit,
+           p.Price, p.StockQty, p.MinStock, p.FeatureJson, p.Status
+      FROM dbo.part p JOIN dbo.part_category c ON c.CategoryId = p.CategoryId
+     WHERE (@CategoryId IS NULL OR p.CategoryId = @CategoryId)
+       AND (@Keyword IS NULL OR p.PartCode LIKE @Kwl OR p.PartName LIKE @Kwl OR p.Spec LIKE @Kwl)
+     ORDER BY p.PartId
+     OFFSET (@PageIndex - 1) * @PageSize ROWS FETCH NEXT @PageSize ROWS ONLY;
+END
+GO
+
+CREATE OR ALTER PROCEDURE dbo.usp_ListPickingsPaged
+    @Status     NVARCHAR(10) = NULL,
+    @PageIndex  INT = 1,
+    @PageSize   INT = 50,
+    @TotalCount INT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT @TotalCount = COUNT(*)
+      FROM dbo.picking_list pl
+     WHERE (@Status IS NULL OR pl.Status = @Status);
+    SELECT pl.PickingId, pl.PickingNo, pl.OrderId, o.OrderNo, d.DeviceName,
+           pl.GeneratedBy, pl.Redundancy, pl.TotalAmount, pl.Status, pl.CreatedAt, pl.IssuedAt
+      FROM dbo.picking_list pl
+      JOIN dbo.work_order o ON o.OrderId = pl.OrderId
+      JOIN dbo.device d ON d.DeviceId = o.DeviceId
+     WHERE (@Status IS NULL OR pl.Status = @Status)
+     ORDER BY pl.PickingId DESC
+     OFFSET (@PageIndex - 1) * @PageSize ROWS FETCH NEXT @PageSize ROWS ONLY;
 END
 GO
 

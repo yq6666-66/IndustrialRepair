@@ -96,6 +96,31 @@ public static class DbHelper
     }
 
     /// <summary>
+    /// 执行存储过程：DataAdapter 填充 DataSet（多结果集）并取回输出参数
+    /// （分页过程 usp_List*Paged 的 @TotalCount 用）。
+    /// </summary>
+    public static (DataSet Data, Dictionary<string, object?> Outputs) GetDataSetProc(
+        string procName, Dictionary<string, object?>? inputs, Dictionary<string, SqlDbType>? outputs)
+    {
+        using var conn = Open();
+        using var cmd = new SqlCommand(procName, conn) { CommandType = CommandType.StoredProcedure };
+        if (inputs != null)
+            foreach (var kv in inputs)
+                cmd.Parameters.AddWithValue(kv.Key, kv.Value ?? DBNull.Value);
+        if (outputs != null)
+            foreach (var kv in outputs)
+                cmd.Parameters.Add(new SqlParameter(kv.Key, kv.Value) { Direction = ParameterDirection.Output });
+        using var adapter = new SqlDataAdapter(cmd);
+        var ds = new DataSet();
+        adapter.Fill(ds);
+        var outs = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        if (outputs != null)
+            foreach (var kv in outputs)
+                outs[kv.Key] = cmd.Parameters[kv.Key].Value == DBNull.Value ? null : cmd.Parameters[kv.Key].Value;
+        return (ds, outs);
+    }
+
+    /// <summary>
     /// C# 侧显式事务演示：BeginTransaction → 多条命令 → Commit / 异常 Rollback。
     /// body 内使用同一连接与事务执行命令。
     /// </summary>

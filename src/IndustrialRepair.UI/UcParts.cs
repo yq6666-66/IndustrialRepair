@@ -19,6 +19,9 @@ internal class UcParts : UserControl, IRefreshable
     private readonly UITextBox _txtKey = Ui.Txt("编码 / 名称 / 规格 模糊搜索", 90, 12, 220);
     private readonly UIComboBox _cmbCat = Ui.Combo(400, 12, 140);
     private readonly UIDataGridView _grid = MakeFillGrid();
+    private readonly UiPager _pager = null!;
+    /// <summary>当前是否为配件列表模式（库存预警/流水视图下禁用行双击编辑）</summary>
+    private bool _listMode = true;
 
     private static UIDataGridView MakeFillGrid()
     {
@@ -26,14 +29,11 @@ internal class UcParts : UserControl, IRefreshable
         g.Dock = DockStyle.Fill;
         return g;
     }
-    private List<Part> _current = new();
-    /// <summary>当前是否为配件列表模式（库存预警/流水视图下禁用行双击编辑）</summary>
-    private bool _listMode = true;
 
     public UcParts()
     {
         // 工具栏两行：检索+维护 / 库存+导出（分行消除按钮重叠；相对工具栏坐标）
-        var btnQuery = Ui.Btn("查询", 560, 10, 80, 32, (_, _) => RefreshData());
+        var btnQuery = Ui.Btn("查询", 560, 10, 80, 32, (_, _) => LoadParts(1, _pageSize));
         var btnAdd = Ui.Btn("新增", 660, 10, 80, 32, (_, _) => EditPart(null));
         var btnEdit = Ui.Btn("编辑", 750, 10, 80, 32, (_, _) =>
         {
@@ -73,12 +73,14 @@ internal class UcParts : UserControl, IRefreshable
             btnQuery, btnAdd, btnEdit, btnDel, btnIn, btnLow, btnLog, btnQr, btnXls
         });
 
-        // Dock 布局（同 FMain 模式）：填充控件先加，标题条最后加
+        // Dock 布局（同 FMain 模式）：填充控件先加，标题条最后加；分页条在工具栏之下
+        _pager = new UiPager((page, size) => LoadParts(page, size));
         Controls.Add(_grid);
         Controls.Add(toolbar);
+        Controls.Add(_pager);
         Controls.Add(Ui.PageHeader("备件库管理", "检索 · 维护 · 入库 · 预警 · 流水 · 二维码 · Excel"));
 
-        Ui.BindEnter(_txtKey, RefreshData);                     // 回车即查（抑制提示音）
+        Ui.BindEnter(_txtKey, () => LoadParts(1, _pageSize));   // 回车即查（回第一页）
         Ui.BindRowDblClick(_grid, _ =>                          // 双击=编辑（仅配件列表模式）
         {
             if (!_listMode) return;
@@ -92,26 +94,73 @@ internal class UcParts : UserControl, IRefreshable
             foreach (var c in _svc.Categories()) _cmbCat.Items.Add(c.CategoryName);
             _cmbCat.SelectedIndex = 0;
         };
-        RefreshData();
+        LoadParts(1, _pageSize);
     }
 
-    private Part? Selected() =>
-        _grid.CurrentRow?.Cells["PartId"].Value is int id ? _current.FirstOrDefault(p => p.PartId == id) : null;
+    /// <summary>从当前行重建 Part（分页列表不再持有全量 _current）。</summary>
+    private Part? Selected()
+    {
+        var row = _grid.CurrentRow;
+        if (row == null || row.Cells["PartId"].Value is not int id) return null;
+        try
+        {
+            return new Part
+            {
+                PartId = id,
+                PartCode = row.Cells["编码"].Value?.ToString() ?? "",
+                PartName = row.Cells["名称"].Value?.ToString() ?? "",
+                CategoryName = row.Cells["类别"].Value?.ToString() ?? "",
+                Spec = row.Cells["规格"].Value?.ToString(),
+                Unit = row.Cells["单位"].Value?.ToString() ?? "个",
+                Price = row.Cells["单价"].Value is decimal d ? d : 0m,
+                StockQty = row.Cells["库存"].Value is int s ? s : 0,
+                MinStock = row.Cells["下限"].Value is int m ? m : 0,
+            };
+        }
+        catch { return null; }
+    }
 
-    public void RefreshData()
+    private int _currentPage = 1;
+    private int _pageSize = 50;
+
+    /// <summary>刷新当前页（IRefreshable / 切页签入口）。</summary>
+    public void RefreshData() => LoadParts(_currentPage, _pageSize);
+
+    /// <summary>分页加载配件列表（R1：OFFSET-FETCH）。</summary>
+    private void LoadParts(int page, int size)
     {
         try
         {
             _listMode = true;
+            _currentPage = page; _pageSize = size;
             int? cat = null;
             if (_cmbCat.SelectedIndex > 0)
                 cat = _svc.Categories().FirstOrDefault(c => c.CategoryName == _cmbCat.Text)?.CategoryId;
-            _current = _svc.Search(_txtKey.Text.Trim(), cat);
-            var t = ToTable(_current);
+            var r = BLL.PagedQuery.Parts(_txtKey.Text.Trim(), cat, page, size);
+            var t = Translate(r.Items);
             _grid.DataSource = t;
+            _pager.Show(r);
             RenameColumns();
         }
         catch (Exception ex) { Ui.Error(DAL.DbHelper.FriendlyError(ex)); }
+    }
+
+    private static System.Data.DataTable Translate(System.Data.DataTable src)
+    {
+        foreach (var (from, to) in new[]
+                 { ("PartId","PartId"), ("PartCode","编码"), ("PartName","名称"), ("CategoryName","类别"),
+                   ("Spec","规格"), ("Unit","单位"), ("Price","单价"), ("StockQty","库存"), ("MinStock","下限") })
+            if (src.Columns.Contains(from)) src.Columns[from]!.ColumnName = to;
+        if (!src.Columns.Contains("状态"))
+        {
+            src.Columns.Add("状态", typeof(string));
+            foreach (System.Data.DataRow r in src.Rows)
+                r["状态"] = (bool)r["Status"] ? "启用" : "停用";
+        }
+        src.Columns.Remove("Status");
+        src.Columns.Remove("FeatureJson");
+        src.Columns.Remove("CategoryId");
+        return src;
     }
 
     private void ShowLow()
@@ -119,25 +168,6 @@ internal class UcParts : UserControl, IRefreshable
         _listMode = false;
         _grid.DataSource = _svc.LowStock();
         RenameColumns();
-    }
-
-    private static System.Data.DataTable ToTable(List<Part> list)
-    {
-        var t = new System.Data.DataTable();
-        t.Columns.Add("PartId", typeof(int));
-        t.Columns.Add("编码", typeof(string));
-        t.Columns.Add("名称", typeof(string));
-        t.Columns.Add("类别", typeof(string));
-        t.Columns.Add("规格", typeof(string));
-        t.Columns.Add("单位", typeof(string));
-        t.Columns.Add("单价", typeof(decimal));
-        t.Columns.Add("库存", typeof(int));
-        t.Columns.Add("下限", typeof(int));
-        t.Columns.Add("状态", typeof(string));
-        foreach (var p in list)
-            t.Rows.Add(p.PartId, p.PartCode, p.PartName, p.CategoryName, p.Spec, p.Unit,
-                       p.Price, p.StockQty, p.MinStock, p.Status ? "启用" : "停用");
-        return t;
     }
 
     private void RenameColumns()

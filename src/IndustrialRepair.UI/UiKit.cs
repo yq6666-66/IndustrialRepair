@@ -142,3 +142,75 @@ internal static class Ui
         return f.Tag as string;
     }
 }
+
+/// <summary>
+/// 分页条（R1 大数据量）：首页/上一页/下一页/末页 + 页码信息 + 每页条数。
+/// 挂到页面 Dock.Bottom；数据加载后调用 Show(分页结果) 刷新状态。
+/// </summary>
+internal sealed class UiPager : Panel
+{
+    private readonly UIButton _first = Ui.Btn("≪ 首页", 8, 2, 76, 28);
+    private readonly UIButton _prev = Ui.Btn("‹ 上一页", 90, 2, 84, 28);
+    private readonly UIButton _next = Ui.Btn("下一页 ›", 180, 2, 84, 28);
+    private readonly UIButton _last = Ui.Btn("末页 ≫", 270, 2, 76, 28);
+    private readonly UILabel _info = new()
+    { AutoSize = false, Size = new Size(230, 28), TextAlign = ContentAlignment.MiddleRight, Font = new Font("微软雅黑", 9F) };
+    private readonly UILabel _lblSize = new() { Text = "每页", AutoSize = true };
+    private readonly UIComboBox _size = new() { Size = new Size(80, 30), DropDownStyle = UIDropDownStyle.DropDownList };
+    private readonly Action<int, int> _load;   // (pageIndex, pageSize)
+    private int _page = 1, _totalPages = 1;
+
+    public UiPager(Action<int, int> load)
+    {
+        _load = load;
+        Dock = DockStyle.Bottom;
+        Height = 34;
+        BackColor = Color.FromArgb(243, 246, 250);
+
+        _size.Items.AddRange(new object[] { "50", "100", "200" });
+        _size.SelectedIndex = 0;
+        _size.SelectedIndexChanged += (_, _) => { if (!_loading) _load(1, SizeValue); };
+        Resize += (_, _) => LayoutRight();
+
+        _first.Click += (_, _) => _load(1, SizeValue);
+        _prev.Click += (_, _) => _load(Math.Max(1, _page - 1), SizeValue);
+        _next.Click += (_, _) => _load(Math.Min(_totalPages, _page + 1), SizeValue);
+        _last.Click += (_, _) => _load(_totalPages, SizeValue);
+
+        Controls.AddRange(new Control[] { _first, _prev, _next, _last, _lblSize, _size, _info });
+        LayoutRight();
+    }
+
+    private bool _loading;
+
+    private void LayoutRight()
+    {
+        _info.Location = new Point(Math.Max(360, Width - 236), 2);
+        _info.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        _size.Location = new Point(Math.Max(280, Width - 330), 2);
+        _size.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        _lblSize.Location = new Point(Math.Max(240, Width - 372), 8);
+        _lblSize.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+    }
+
+    private int SizeValue => int.Parse(_size.Text);
+
+    /// <summary>按分页结果刷新按钮可用态与页码文本（初始挂载时避免触发联动加载）。</summary>
+    public void Show<T>(IndustrialRepair.Models.PagedResult<T> r) =>
+        Show(r.PageIndex, r.TotalCount, r.PageSize, r.HasPrev, r.HasNext);
+
+    /// <summary>表格分页结果重载。</summary>
+    public void Show(IndustrialRepair.Models.PagedTable r) =>
+        Show(r.PageIndex, r.TotalCount, r.PageSize, r.HasPrev, r.HasNext);
+
+    private void Show(int page, int total, int size, bool hasPrev, bool hasNext)
+    {
+        _loading = true;
+        _page = page;
+        _totalPages = Math.Max(1, size <= 0 ? 1 : (total + size - 1) / size);
+        _info.Text = $"第 {_page}/{_totalPages} 页 · 共 {total} 条";
+        _first.Enabled = _prev.Enabled = hasPrev;
+        _next.Enabled = _last.Enabled = hasNext;
+        _loading = false;
+    }
+}
