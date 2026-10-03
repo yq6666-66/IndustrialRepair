@@ -24,6 +24,7 @@ internal class UcUsers : UserControl, IRefreshable
         var tabUsers = new TabPage("账号管理");
         var tabLogin = new TabPage("登录日志");
         var tabOp = new TabPage("操作日志");
+        var tabBackup = new TabPage("备份恢复");
 
         var btnToggle = Ui.Btn("启用/禁用", 10, 12, 100, 32, OnToggle);
         var btnReset = Ui.Btn("重置密码", 120, 12, 90, 32, OnReset);
@@ -39,8 +40,14 @@ internal class UcUsers : UserControl, IRefreshable
         _tabs.TabPages.Add(tabUsers);
         _tabs.TabPages.Add(tabLogin);
         _tabs.TabPages.Add(tabOp);
+        _tabs.TabPages.Add(tabBackup);
+        BuildBackupTab(tabBackup);
         _tabs.SelectedIndex = 0;
-        _tabs.SelectedIndexChanged += (_, _) => RefreshData();
+        _tabs.SelectedIndexChanged += (_, _) =>
+        {
+            if (_tabs.SelectedIndex == 3) LoadBackups();   // OR2：切到备份 Tab 时加载列表
+            else RefreshData();
+        };
 
         Controls.Add(_tabs);
         Controls.Add(Ui.PageHeader("用户与日志", "账号启停 · 角色 · MFA · 登录/操作审计"));
@@ -98,6 +105,75 @@ internal class UcUsers : UserControl, IRefreshable
     {
         foreach (var (from, to) in map)
             if (t.Columns.Contains(from)) t.Columns[from]!.ColumnName = to;
+    }
+
+    /* ---- 备份恢复（OR2） ---- */
+    private readonly BackupService _backup = new();
+    private readonly UIDataGridView _gridBackup = Ui.Grid(10, 54, 1160, 560);
+
+    private void BuildBackupTab(TabPage tab)
+    {
+        var btnBackup = Ui.Btn("立即备份", 10, 12, 100, 32, (_, _) =>
+        {
+            Ui.Busy(() =>
+            {
+                var tag = Ui.Input("备份标签（选填，用于区分用途）：", "标签：") ?? "";
+                var r = _backup.Backup(tag);
+                if (r.Success) { Ui.Info(r.Message); LoadBackups(); } else Ui.Error(r.Message);
+            });
+        });
+        var btnRestore = Ui.Btn("恢复", 120, 12, 80, 32, (_, _) =>
+        {
+            var sel = SelectedBackup();
+            if (sel == null) { Ui.Error("请先选择备份文件。"); return; }
+            if (!Ui.Ask($"⚠ 恢复将覆盖当前全部数据！\n\n确定要从\n{sel.FileName}\n恢复吗？")) return;
+            Ui.Busy(() =>
+            {
+                var r = _backup.Restore(sel);
+                Ui.Info(r.Message + "\n\n建议重启系统使缓存失效。");
+                LoadBackups();
+            });
+        });
+        var btnDelete = Ui.Btn("删除备份", 210, 12, 90, 32, (_, _) =>
+        {
+            var sel = SelectedBackup();
+            if (sel == null) { Ui.Error("请先选择备份文件。"); return; }
+            if (!Ui.Ask($"确定删除 {sel.FileName}？")) return;
+            var r = _backup.Delete(sel);
+            if (r.Success) LoadBackups(); else Ui.Error(r.Message);
+        });
+        var btnOpen = Ui.Btn("打开目录", 310, 12, 90, 32, (_, _) =>
+            System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{BackupService.BackupDir}\""));
+
+        var lblHint = new UILabel
+        {
+            Text = $"备份目录：{BackupService.BackupDir}（恢复前建议先做一次新备份）",
+            AutoSize = true, Location = new Point(420, 18), Font = new Font("微软雅黑", 8.5F),
+            ForeColor = Color.FromArgb(110, 122, 138)
+        };
+
+        tab.Controls.AddRange(new Control[] { btnBackup, btnRestore, btnDelete, btnOpen, lblHint, _gridBackup });
+    }
+
+    private BackupService.BackupInfo? SelectedBackup()
+    {
+        var row = _gridBackup.CurrentRow;
+        if (row == null) return null;
+        var path = row.Cells["FullPath"]?.Value?.ToString();
+        return _backup.ListBackups().FirstOrDefault(b => b.FullPath == path);
+    }
+
+    private void LoadBackups()
+    {
+        var t = new System.Data.DataTable();
+        t.Columns.Add("文件名", typeof(string));
+        t.Columns.Add("大小(KB)", typeof(long));
+        t.Columns.Add("时间", typeof(string));
+        t.Columns.Add("FullPath", typeof(string));
+        foreach (var b in _backup.ListBackups())
+            t.Rows.Add(b.FileName, b.SizeBytes / 1024, b.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"), b.FullPath);
+        _gridBackup.DataSource = t;
+        if (_gridBackup.Columns.Contains("FullPath")) _gridBackup.Columns["FullPath"]!.Visible = false;
     }
 
     private int SelectedUserId() =>

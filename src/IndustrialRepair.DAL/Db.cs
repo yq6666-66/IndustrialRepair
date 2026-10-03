@@ -16,6 +16,18 @@ public static class Db
 
     public static string ConnectionString { get; private set; } = DefaultConnectionString;
 
+    /// <summary>当前目标数据库名（从连接串解析；BackupService 用）。</summary>
+    public static string DatabaseName
+    {
+        get
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(ConnectionString,
+                @"(?:Database|Initial Catalog)\s*=\s*([^;]+)",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            return match.Groups[1].Value.Trim();
+        }
+    }
+
     static Db() => LoadConfig();
 
     /// <summary>
