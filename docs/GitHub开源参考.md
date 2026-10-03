@@ -16,6 +16,11 @@
 | 8 | **Serilog** | [serilog/serilog](https://github.com/serilog/serilog) + [Sinks.File](https://github.com/serilog/serilog-sinks-file) | ~7k★ | Apache-2.0 | 4.4.0 + 7.0.0 | 文件日志内核（NR5）：FileLog 门面 API 不变，按日滚动、保留 14 天、多进程 shared 写 |
 | 9 | **Polly** | [App-vNext/Polly](https://github.com/App-vNext/Polly) | ~13k★ | Apache-2.0 | 8.x（Polly.Core） | SQL 瞬时故障重试管道（NR5）：LocalDB 冷启动 4 类错误号、常量退避 700ms×3 次尝试，消除 DbHelper/DbInitializer 重复实现 |
 | 10 | **OpenCvSharp（运行时）** | opencvsharp4.runtime.win | — | Apache-2.0 | 4.13.x | OpenCV 原生库（随发布分发） |
+| 11 | **FluentValidation** | [FluentValidation/FluentValidation](https://github.com/FluentValidation/FluentValidation) | ~9k★ | Apache-2.0 | 12.x | 集中输入校验（NR6）：配件/设备/注册/冗余系数四套验证器，UI 与 BLL 共用 |
+| 12 | **CsvHelper** | [JoshClose/CsvHelper](https://github.com/JoshClose/CsvHelper) | ~5k★ | MS-PL + Apache-2.0 | 34.x | CSV 统一读写（NR7）：RFC4180 转义/UTF-8 BOM/标签清单解析（含注释与行号报错） |
+| 13 | **Microsoft.ML.OnnxRuntime** | [dotnet/onnxruntime](https://github.com/dotnet/onnxruntime) | ~5k★ | MIT | 1.23.x | ONNX 推理后端（NR8）：课程模型预留接入位——配置 Onnx 节即自动启用，未配置回退特征库 |
+| 14 | **Bogus** | [bchavez/Bogus](https://github.com/bchavez/Bogus) | ~5k★ | MIT | 35.x | 压测数据生成（NR9）：故障描述组合生成（部位×症状×备注），固定种子可复现 |
+| 15 | **FuzzySharp** | [JakeBayer/FuzzySharp](https://github.com/JakeBayer/FuzzySharp) | ~1.5k★ | MIT | 1.x | 配件模糊搜索（NR10）：Levenshtein 编辑距离，精确无命中自动回退（PartialRatio 中文子串匹配） |
 | 5 | **ClosedXML** | [ClosedXML/ClosedXML](https://github.com/ClosedXML/ClosedXML) | ~4.6k★ | MIT | 最新 | 领料清单/维修报表/配件库存导出 .xlsx（标题、表头样式、冻结行、自适应列宽、合计行） |
 | 6 | **MQTTnet** | [dotnet/MQTTnet](https://github.com/dotnet/MQTTnet) | ~4k★（.NET 基金会） | MIT | 4.3.7.1207 | IoT 网关：应用内嵌 MqttServer(127.0.0.1:18835) + 设备遥测模拟发布/订阅 + 超阈值自动报修工单 |
 | 7 | **BCrypt.Net-Next** | [BcryptNet/bcrypt.net](https://github.com/BcryptNet/bcrypt.net) | ~1k★ | MIT | 4.2.0 | 口令 bcrypt 哈希（cost=11） |
