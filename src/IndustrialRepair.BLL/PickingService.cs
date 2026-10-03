@@ -64,16 +64,18 @@ public class PickingService
     /// <summary>导出领料清单 CSV（供仓库打印/对账）</summary>
     public string ExportCsv(int pickingId)
     {
+        // NR7：CsvHelper 统一写出（UTF-8 BOM；合计行以字典行追加）
         var list = _repo.GetItems(pickingId);
-        var sb = new StringBuilder();
-        sb.AppendLine("配件编码,配件名称,数量,单价,金额,备注");
-        foreach (var i in list)
-            sb.AppendLine($"{i.PartCode},{i.PartName},{i.Qty},{i.UnitPrice:F2},{i.Amount:F2},{i.Remark}");
         var total = 0m; foreach (var i in list) total += i.Amount;
-        sb.AppendLine($",合计,,,,{total:F2}");
-        var file = Path.Combine(Path.GetTempPath(), $"领料清单_{pickingId}_{DateTime.Now:HHmmss}.csv");
-        File.WriteAllText(file, sb.ToString(), new UTF8Encoding(true));   // BOM：Excel 中文不乱码
-        return file;
+        var rows = new List<Dictionary<string, object?>>();
+        foreach (var i in list)
+            rows.Add(new Dictionary<string, object?>
+            { ["配件编码"] = i.PartCode, ["配件名称"] = i.PartName, ["数量"] = i.Qty,
+              ["单价"] = i.UnitPrice.ToString("F2"), ["金额"] = i.Amount.ToString("F2"), ["备注"] = i.Remark });
+        rows.Add(new Dictionary<string, object?>
+        { ["配件编码"] = "", ["配件名称"] = "合计", ["数量"] = "", ["单价"] = "", ["金额"] = total.ToString("F2"), ["备注"] = "" });
+
+        return CsvIo.WriteRows(rows, Path.Combine(Path.GetTempPath(), $"领料清单_{pickingId}_{DateTime.Now:HHmmss}.csv"));
     }
 
     /// <summary>导出领料清单 Excel（开源库 ClosedXML：样式+合计行）</summary>

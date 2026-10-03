@@ -21,22 +21,16 @@ public class DashboardService
     /// </summary>
     public string ExportCsv()
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("类别,指标,数值");
+        // NR7：CsvHelper 统一写出（UTF-8 BOM，RFC4180 转义由库保证）
+        var rows = new List<Dictionary<string, object?>>();
         foreach (var r in Rows())
-            sb.AppendLine($"{r.Kind},{Escape(r.Label)},{r.Val}");
+            rows.Add(new Dictionary<string, object?> { ["类别"] = r.Kind, ["指标"] = r.Label, ["数值"] = r.Val });
 
         var dir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "IndustrialRepair", "export");
-        Directory.CreateDirectory(dir);
-        var file = Path.Combine(dir, $"dashboard_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
-        File.WriteAllText(file, sb.ToString(), new UTF8Encoding(true));
-        return file;
+        return CsvIo.WriteRows(rows, Path.Combine(dir, $"dashboard_{DateTime.Now:yyyyMMdd_HHmmss}.csv"));
     }
-
-    private static string Escape(string field) =>
-        field.Contains(',') || field.Contains('"') ? $"\"{field.Replace("\"", "\"\"")}\"" : field;
 
     /// <summary>顶部汇总：今日工单/待派单/维修中/已完成/本月材料成本/库存总价值(R3)</summary>
     public (int today, int pending, int working, int done, decimal monthCost, decimal stockValue) Summary()

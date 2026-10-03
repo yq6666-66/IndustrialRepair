@@ -64,20 +64,16 @@ int RunVisual(string outDir)
     var labelsFile = Arg("labels");
     if (string.IsNullOrWhiteSpace(labelsFile)) return Usage("visual 模式必须提供 --labels=<csv>");
 
-    // 标签解析：image,expectedPartCode（# 注释/空行跳过；格式错即报错）
-    var labels = new List<(string Image, string? Expected)>();
-    var lines = File.ReadAllLines(labelsFile, Encoding.UTF8);
-    for (int i = 0; i < lines.Length; i++)
+    // 标签解析（NR7：CsvHelper 统一读取，支持 # 注释；表头/行格式错误由库带行号报错）
+    List<(string Image, string? Expected)> labels;
+    try
     {
-        var line = lines[i].Trim();
-        if (line.Length == 0 || line.StartsWith('#')) continue;
-        var cells = line.Split(',');
-        if (cells.Length != 2)
-        {
-            Console.Error.WriteLine($"× 标签第 {i + 1} 行格式错误（应为 image,expectedPartCode）：{line}");
-            return 1;
-        }
-        labels.Add((cells[0].Trim(), string.IsNullOrWhiteSpace(cells[1]) ? null : cells[1].Trim()));
+        labels = CsvIo.ReadLabels(labelsFile);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"× 标签清单解析失败：{ex.Message}");
+        return 1;
     }
     if (labels.Count == 0) return Usage("标签清单为空（至少一行有效记录）");
 

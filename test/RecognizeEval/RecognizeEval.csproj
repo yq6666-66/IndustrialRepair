@@ -12,4 +12,8 @@
     <ProjectReference Include="..\..\src\IndustrialRepair.BLL\IndustrialRepair.BLL.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="CsvHelper" Version="33.1.0" />
+  </ItemGroup>
+
 </Project>
