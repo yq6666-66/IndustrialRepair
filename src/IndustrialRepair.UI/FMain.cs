@@ -201,9 +201,11 @@ public class FMain : UIForm
             }
         };
         NotificationCenter.Raised += OnNotification;
+        ScheduleHost.Start();   // NR4：登录后启动定时任务（库存预警汇总/超时工单扫描）
         FormClosed += (_, _) =>
         {
             NotificationCenter.Raised -= OnNotification;
+            ScheduleHost.Stop();
             _tray.Visible = false;
             _tray.Icon?.Dispose();
             _tray.Dispose();

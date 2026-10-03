@@ -347,6 +347,22 @@ var ids2 = p2.Items.AsEnumerable().Select(r => Convert.ToInt32(r["OrderId"])).To
 Check("分页页间无重叠", !ids1.Overlaps(ids2) && (allOrders <= 5 || ids2.Count > 0), $"p1[{ids1.Count}] p2[{ids2.Count}]（库内 {allOrders} 条）");
 var pp = PagedQuery.Parts(null, null, 1, 3);
 Check("配件分页可用", pp.TotalCount >= 18 && pp.Items.Rows.Count <= 3, $"配件总数 {pp.TotalCount}");
+// 5.2 定时任务（NR4）：制造确定性数据（跌破下限的库存 + 停滞 72h 的已派单单）再 RunOnce
+DbHelper.ExecuteNonQuery("UPDATE dbo.part SET StockQty = 1 WHERE PartCode = N'P-RH-003'");   // 下限 8 → 触发预警
+var engId = Convert.ToInt32(DbHelper.ExecuteScalar("SELECT UserId FROM dbo.sys_user WHERE UserName = N'engineer'") ?? 0);
+DbHelper.ExecuteNonQuery(
+    "UPDATE dbo.work_order SET Status = N'Assigned', EngineerId = @E, AssignTime = DATEADD(HOUR, -72, GETDATE()) WHERE OrderId = @Id",
+    CommandType.Text, DbHelper.P("@E", engId), DbHelper.P("@Id", otherOrderId));             // 已派单停滞
+int notifCount = 0;
+NotificationCenter.Raised += _ => Interlocked.Increment(ref notifCount);
+var digest = StockAlertDigestJob.RunOnce();
+var stale = StaleOrderScanJob.RunOnce();
+bool jobLogged = Convert.ToInt32(DbHelper.ExecuteScalar(
+    "SELECT COUNT(*) FROM dbo.sys_operation_log WHERE Module = N'定时任务' AND Action IN (N'库存预警汇总', N'超时工单扫描')") ?? 0) >= 2;
+Check("定时任务写操作日志(NR4)", jobLogged, $"digest={digest[..Math.Min(24, digest.Length)]}…");
+Check("定时任务触发通知(NR4)", notifCount >= 2, $"通知 {notifCount} 次");
+Check("库存预警汇总命中(NR4)", digest.Contains("1 项未处理预警"), digest);
+
 var dash = new DashboardService();
 var (today, pending, working, doneCnt, cost, stockValue) = dash.Summary();
 Console.WriteLine($"   大屏汇总：今日{today} 待派{pending} 维修中{working} 已完成{doneCnt} 本月成本{cost} 库存价值{stockValue:N0}");

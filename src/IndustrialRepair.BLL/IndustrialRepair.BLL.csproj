@@ -12,6 +12,7 @@
     <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" />
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260627" />
     <PackageReference Include="QRCoder" Version="1.8.0" />
+    <PackageReference Include="Quartz" Version="3.13.1" />
     <PackageReference Include="QuestPDF" Version="2026.9.1" />
     <PackageReference Include="System.Drawing.Common" Version="10.0.12" />
     <PackageReference Include="System.IO.Ports" Version="10.0.12" />
