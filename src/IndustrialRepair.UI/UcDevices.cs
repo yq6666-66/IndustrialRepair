@@ -204,11 +204,14 @@ internal class FDeviceEdit : UIForm
     }
 }
 
-/// <summary>维修报表（视图 vw_RepairReport）</summary>
+/// <summary>维修报表（vw_RepairReport + 高成本工单 TopN，R3 时间范围筛选）</summary>
 internal class UcReport : UserControl, IRefreshable
 {
     private readonly WorkOrderService _svc = new();
+    private readonly DashboardService _dash = new();
     private readonly UIDataGridView _grid = FillGrid2();
+    private readonly UIDataGridView _gridCost = FillGrid2();
+    private readonly UIComboBox _cmbRange = Ui.Combo(360, 8, 130);
 
     private static UIDataGridView FillGrid2()
     {
@@ -230,22 +233,67 @@ internal class UcReport : UserControl, IRefreshable
             catch (Exception ex) { Ui.Error(ex.Message); }
         });
 
+        _cmbRange.Items.AddRange(new object[] { "全部月份", "近 6 个月", "今年" });
+        _cmbRange.SelectedIndex = 0;
+        _cmbRange.DropDownStyle = UIDropDownStyle.DropDownList;
+        _cmbRange.SelectedIndexChanged += (_, _) => RefreshData();
+
         var toolbar = new Panel { Dock = DockStyle.Top, Height = 46 };
         var lbl = new UILabel
         {
             Text = "按月统计：工单量 · 完成数 · 取消数 · 平均处理分钟 · 材料成本", AutoSize = true,
             Location = new Point(10, 12), Font = new Font("微软雅黑", 9F), ForeColor = Color.FromArgb(90, 100, 115)
         };
-        toolbar.Controls.AddRange(new Control[] { lbl, btn, btnXls });
+        var lblRange = new UILabel { Text = "范围：", AutoSize = true, Location = new Point(310, 13), Font = new Font("微软雅黑", 9F) };
+        toolbar.Controls.AddRange(new Control[] { lbl, lblRange, _cmbRange, btn, btnXls });
 
-        Controls.Add(_grid);
+        var topHalf = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 26, 0, 4) };
+        var head1 = new UILabel
+        { Text = "月度统计（vw_RepairReport）", Dock = DockStyle.Top, Height = 24, Font = new Font("微软雅黑", 9.5F, FontStyle.Bold) };
+        topHalf.Controls.Add(_grid);
+        topHalf.Controls.Add(head1);
+
+        var bottomHalf = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 26, 0, 0) };
+        var head2 = new UILabel
+        { Text = "高成本工单 Top10（材料成本，vw_OrderCost）", Dock = DockStyle.Top, Height = 24, Font = new Font("微软雅黑", 9.5F, FontStyle.Bold) };
+        bottomHalf.Controls.Add(_gridCost);
+        bottomHalf.Controls.Add(head2);
+
+        var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 300 };
+        split.Panel1.Controls.Add(topHalf);
+        split.Panel2.Controls.Add(bottomHalf);
+
+        Controls.Add(split);
         Controls.Add(toolbar);
-        Controls.Add(Ui.PageHeader("维修报表", "vw_RepairReport 月度视图 · 可导出 Excel"));
+        Controls.Add(Ui.PageHeader("维修报表", "月度统计 · 时间范围筛选 · 高成本工单榜"));
     }
 
     public void RefreshData()
     {
-        try { _grid.DataSource = _svc.ReportSheet(); }
+        try
+        {
+            var t = _svc.ReportSheet();
+            // 时间范围过滤（R3）：月份列形如 2026-09
+            string? floor = _cmbRange.SelectedIndex switch
+            {
+                1 => DateTime.Now.AddMonths(-5).ToString("yyyy-MM"),
+                2 => $"{DateTime.Now:yyyy}-01",
+                _ => null
+            };
+            if (floor != null && t.Columns.Contains("月份"))
+            {
+                var view = new System.Data.DataView(t);
+                view.RowFilter = $"月份 >= '{floor}'";
+                t = view.ToTable();
+            }
+            _grid.DataSource = t;
+
+            var cost = _dash.OrderCostTop(10);
+            if (cost.Columns.Contains("Status")) cost.Columns["Status"]!.ColumnName = "状态";
+            foreach (System.Data.DataRow r in cost.Rows)
+                r["状态"] = OrderStatusCode.ToChinese(r["状态"].ToString()!);
+            _gridCost.DataSource = cost;
+        }
         catch (Exception ex) { Ui.Error(DbHelper.FriendlyError(ex)); }
     }
 }

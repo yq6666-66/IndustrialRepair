@@ -465,7 +465,7 @@ BEGIN
 END
 GO
 
--- 9. 大屏统计：状态分布 / 近7日趋势 / 工程师排行 / 低库存
+-- 9. 大屏统计：状态分布 / 近7日趋势(工单+成本) / 工程师排行 / 低库存 / 类别库存(R3)
 CREATE OR ALTER PROCEDURE dbo.usp_GetDashboard
 AS
 BEGIN
@@ -478,12 +478,22 @@ BEGIN
     OUTER APPLY (SELECT COUNT(*) Total FROM dbo.work_order o
                  WHERE CONVERT(date, o.CreatedAt) = d.Day) c
     UNION ALL
+    SELECT N'近7日成本', CONVERT(NVARCHAR(10), d2.Day, 120), ISNULL(c2.Cost, 0)
+    FROM (SELECT DISTINCT CONVERT(date, IssuedAt) AS Day FROM dbo.picking_list
+          WHERE IssuedAt >= DATEADD(DAY, -6, CONVERT(date, GETDATE()))) d2
+    OUTER APPLY (SELECT ISNULL(SUM(TotalAmount), 0) Cost FROM dbo.picking_list pl
+                 WHERE pl.Status = N'Issued' AND CONVERT(date, pl.IssuedAt) = d2.Day) c2
+    UNION ALL
     SELECT N'工程师完工', u.RealName, COUNT(*) FROM dbo.work_order o
     JOIN dbo.sys_user u ON u.UserId = o.EngineerId
     WHERE o.Status = N'Done' GROUP BY u.RealName
     UNION ALL
     SELECT N'库存预警', p.PartName, p.StockQty FROM dbo.part p
-    WHERE p.StockQty < p.MinStock;
+    WHERE p.StockQty < p.MinStock
+    UNION ALL
+    SELECT N'类别库存', c.CategoryName, ISNULL(SUM(p.StockQty), 0)
+    FROM dbo.part p JOIN dbo.part_category c ON c.CategoryId = p.CategoryId
+    GROUP BY c.CategoryName;
 END
 GO
 
@@ -606,6 +616,18 @@ SELECT CONVERT(NVARCHAR(7), o.CreatedAt, 120) AS [月份],
 FROM dbo.work_order o
 LEFT JOIN cost c ON c.OrderId = o.OrderId
 GROUP BY CONVERT(NVARCHAR(7), o.CreatedAt, 120);
+GO
+
+CREATE OR ALTER VIEW dbo.vw_OrderCost
+AS
+SELECT o.OrderId, o.OrderNo, o.Status, d.DeviceName, eg.RealName AS EngineerName,
+       o.FinishTime, ISNULL(c.MaterialCost, 0) AS MaterialCost
+FROM dbo.work_order o
+JOIN dbo.device d ON d.DeviceId = o.DeviceId
+LEFT JOIN dbo.sys_user eg ON eg.UserId = o.EngineerId
+OUTER APPLY (SELECT ISNULL(SUM(i.Qty * i.UnitPrice), 0) AS MaterialCost
+             FROM dbo.picking_list pl JOIN dbo.picking_item i ON i.PickingId = pl.PickingId
+             WHERE pl.OrderId = o.OrderId) c;
 GO
 
 CREATE OR ALTER VIEW dbo.vw_LowStock

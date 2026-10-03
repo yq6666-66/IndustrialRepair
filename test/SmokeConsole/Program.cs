@@ -319,9 +319,12 @@ Check("分页页间无重叠", !ids1.Overlaps(ids2) && (allOrders <= 5 || ids2.C
 var pp = PagedQuery.Parts(null, null, 1, 3);
 Check("配件分页可用", pp.TotalCount >= 18 && pp.Items.Rows.Count <= 3, $"配件总数 {pp.TotalCount}");
 var dash = new DashboardService();
-var (today, pending, working, doneCnt, cost) = dash.Summary();
-Console.WriteLine($"   大屏汇总：今日{today} 待派{pending} 维修中{working} 已完成{doneCnt} 本月成本{cost}");
+var (today, pending, working, doneCnt, cost, stockValue) = dash.Summary();
+Console.WriteLine($"   大屏汇总：今日{today} 待派{pending} 维修中{working} 已完成{doneCnt} 本月成本{cost} 库存价值{stockValue:N0}");
 Check("大屏数据可用", dash.Rows().Count > 0);
+Check("大屏含近7日成本系列(R3)", dash.Rows().Any(r => r.Kind == "近7日成本"));
+Check("大屏含类别库存系列(R3)", dash.Rows().Any(r => r.Kind == "类别库存"));
+Check("高成本工单榜可用(R3)", dash.OrderCostTop(10).Rows.Count >= 1);
 Check("维修报表数据可用", orderSvc.ReportSheet().Rows.Count > 0);
 
 Console.WriteLine("== 6. 库存预警与流水 ==");

@@ -16,7 +16,7 @@ namespace IndustrialRepair.UI;
 internal class UcDashboard : UserControl, IRefreshable
 {
     private readonly DashboardService _svc = new();
-    private readonly Label[] _cards = new Label[5];
+    private readonly Label[] _cards = new Label[6];
     private readonly UIBarChart _barStatus = new() { Dock = DockStyle.Fill };
     private readonly UILineChart _lineTrend = new() { Dock = DockStyle.Fill };
     private readonly UIBarChart _barEngineer = new() { Dock = DockStyle.Fill };
@@ -24,7 +24,7 @@ internal class UcDashboard : UserControl, IRefreshable
 
     public UcDashboard()
     {
-        // ---- 汇总卡片 + CSV 导出（山海鲸等外部大屏的数据源） ----
+        // ---- 汇总卡片（6 张：含 R3 库存总价值）+ CSV 导出（山海鲸等外部大屏的数据源） ----
         var top = new Panel { Dock = DockStyle.Top, Height = 86, Padding = new Padding(6) };
         var btnCsv = Ui.Btn("导出CSV\n(大屏数据源)", 0, 0, 118, 60);
         btnCsv.Dock = DockStyle.Right;
@@ -35,15 +35,15 @@ internal class UcDashboard : UserControl, IRefreshable
             catch (Exception ex) { Ui.Error("导出失败：" + ex.Message); }
         };
         top.Controls.Add(btnCsv);
-        string[] names = { "今日工单", "待派单", "维修中", "已完成", "本月材料成本(元)" };
-        for (int i = 0; i < 5; i++)
+        string[] names = { "今日工单", "待派单", "维修中", "已完成", "本月材料成本(元)", "库存总价值(元)" };
+        for (int i = 0; i < 6; i++)
         {
             var card = new Label
             {
                 Text = $"{names[i]}\n--",
-                Dock = DockStyle.Left, Width = (1180 - 40) / 5,
-                Font = new Font("微软雅黑", 11F, FontStyle.Bold),
-                BackColor = i switch { 1 => Color.FromArgb(230, 162, 60), 2 => Color.FromArgb(48, 116, 222), 3 => Color.FromArgb(80, 160, 90), 4 => Color.FromArgb(130, 90, 160), _ => Color.FromArgb(70, 130, 200) },
+                Dock = DockStyle.Left, Width = (1180 - 40) / 6,
+                Font = new Font("微软雅黑", 10.5F, FontStyle.Bold),
+                BackColor = i switch { 1 => Color.FromArgb(230, 162, 60), 2 => Color.FromArgb(48, 116, 222), 3 => Color.FromArgb(80, 160, 90), 4 => Color.FromArgb(130, 90, 160), 5 => Color.FromArgb(160, 110, 60), _ => Color.FromArgb(70, 130, 200) },
                 ForeColor = Color.White, TextAlign = ContentAlignment.MiddleCenter, Margin = new Padding(4)
             };
             _cards[i] = card;
@@ -61,7 +61,7 @@ internal class UcDashboard : UserControl, IRefreshable
         table.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
 
         table.Controls.Add(PanelOf("工单状态分布（件）", _barStatus), 0, 0);
-        table.Controls.Add(PanelOf("近7日报修趋势（单）", _lineTrend), 1, 0);
+        table.Controls.Add(PanelOf("近7日：报修工单与出库成本", _lineTrend), 1, 0);
         table.Controls.Add(PanelOf("维修工程师完工排行", _barEngineer), 0, 1);
         table.Controls.Add(PanelOf("库存预警（低于安全下限）", GridHost(_gridLow)), 1, 1);
         body.Controls.Add(table);
@@ -97,9 +97,9 @@ internal class UcDashboard : UserControl, IRefreshable
     {
         try
         {
-            var (today, pending, working, done, cost) = _svc.Summary();
-            string[] vals = { today.ToString(), pending.ToString(), working.ToString(), done.ToString(), cost.ToString("N2") };
-            for (int i = 0; i < 5; i++)
+            var (today, pending, working, done, cost, stockValue) = _svc.Summary();
+            string[] vals = { today.ToString(), pending.ToString(), working.ToString(), done.ToString(), cost.ToString("N2"), stockValue.ToString("N2") };
+            for (int i = 0; i < 6; i++)
                 _cards[i].Text = $"{_cards[i].Text.Split('\n')[0]}\n{vals[i]}";
 
             var rows = _svc.Rows();
@@ -110,14 +110,21 @@ internal class UcDashboard : UserControl, IRefreshable
                     status.Select(r => OrderStatusCode.ToChinese(r.Label)).ToArray(),
                     status.Select(r => (double)r.Val).ToArray(), "工单状态分布");
 
-            var trend = rows.Where(r => r.Kind == "近7日工单")
-                            .OrderBy(r => r.Label).ToList();
+            // 近 7 日双系列：报修工单数（左轴）+ 出库成本（右轴，R3）
+            var trend = rows.Where(r => r.Kind == "近7日工单").OrderBy(r => r.Label).ToList();
+            var costTrend = rows.Where(r => r.Kind == "近7日成本")
+                                .OrderBy(r => r.Label).ToDictionary(r => r.Label, r => r.Val);
             if (trend.Count > 0)
             {
                 var option = new UILineOption();
                 var series = option.AddSeries("报修工单数", false);
+                var costSeries = option.AddSeries("出库成本(元)", true);
                 foreach (var r in trend)
-                    series.Add(r.Label.Length > 5 ? r.Label[5..] : r.Label, r.Val);
+                {
+                    var label = r.Label.Length > 5 ? r.Label[5..] : r.Label;
+                    series.Add(label, r.Val);
+                    costSeries.Add(label, costTrend.TryGetValue(r.Label, out var c) ? c : 0);
+                }
                 _lineTrend.SetOption(option);
                 _lineTrend.Refresh();
             }

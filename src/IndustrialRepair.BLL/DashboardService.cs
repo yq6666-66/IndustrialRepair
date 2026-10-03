@@ -38,8 +38,8 @@ public class DashboardService
     private static string Escape(string field) =>
         field.Contains(',') || field.Contains('"') ? $"\"{field.Replace("\"", "\"\"")}\"" : field;
 
-    /// <summary>顶部汇总：今日工单/待派单/维修中/已完成/本月材料成本</summary>
-    public (int today, int pending, int working, int done, decimal monthCost) Summary()
+    /// <summary>顶部汇总：今日工单/待派单/维修中/已完成/本月材料成本/库存总价值(R3)</summary>
+    public (int today, int pending, int working, int done, decimal monthCost, decimal stockValue) Summary()
     {
         var t = DbHelper.GetTable(
             @"SELECT
@@ -48,9 +48,15 @@ public class DashboardService
                 ISNULL(SUM(CASE WHEN Status='Working' THEN 1 ELSE 0 END), 0) AS Working,
                 ISNULL(SUM(CASE WHEN Status='Done' THEN 1 ELSE 0 END), 0) AS DoneCount,
                 (SELECT ISNULL(SUM(TotalAmount), 0) FROM dbo.picking_list
-                 WHERE Status='Issued' AND CONVERT(NVARCHAR(7), IssuedAt, 120)=CONVERT(NVARCHAR(7), GETDATE(), 120)) AS MonthCost
+                 WHERE Status='Issued' AND CONVERT(NVARCHAR(7), IssuedAt, 120)=CONVERT(NVARCHAR(7), GETDATE(), 120)) AS MonthCost,
+                (SELECT ISNULL(SUM(StockQty * Price), 0) FROM dbo.part) AS StockValue
               FROM dbo.work_order");
         var r = t.Rows[0];
-        return ((int)r["TodayCount"], (int)r["Pending"], (int)r["Working"], (int)r["DoneCount"], (decimal)r["MonthCost"]);
+        return ((int)r["TodayCount"], (int)r["Pending"], (int)r["Working"], (int)r["DoneCount"],
+                (decimal)r["MonthCost"], (decimal)r["StockValue"]);
     }
+
+    /// <summary>高成本工单 TopN（R3：报表页下半榜）</summary>
+    public System.Data.DataTable OrderCostTop(int top = 10) =>
+        DbHelper.GetTable($"SELECT TOP ({Math.Clamp(top, 1, 50)}) OrderNo, DeviceName, EngineerName, Status, MaterialCost FROM dbo.vw_OrderCost WHERE MaterialCost > 0 ORDER BY MaterialCost DESC");
 }
