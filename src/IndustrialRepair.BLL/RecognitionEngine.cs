@@ -94,7 +94,29 @@ public class RecognitionEngine : IImageRecognizer
             catch { /* 解码失败继续视觉路径 */ }
         }
 
-        // ② 提取视觉特征（OpenCV 优先，异常降级）
+        // ② 视觉路径：NR8——ONNX 后端配置就绪则优先推理（编码→特征库回填 PartId），
+        //    否则特征库加权最近邻；两条路径异常均降级托管规则
+        var onnx = OnnxImageRecognizerFactory.Create();
+        if (onnx.Enabled)
+        {
+            try
+            {
+                foreach (var cand in onnx.Recognize(imagePath))
+                {
+                    var hit = _parts.Search(cand.PartCode).FirstOrDefault(p =>
+                        string.Equals(p.PartCode, cand.PartCode, StringComparison.OrdinalIgnoreCase));
+                    if (hit == null) continue;   // 模型类别不在配件库：丢弃（评测可见 Fallback）
+                    results.Add(new RecognizeResult
+                    {
+                        PartId = hit.PartId, PartCode = hit.PartCode, PartName = hit.PartName,
+                        Score = cand.Score, Source = cand.Source, Reason = cand.Reason
+                    });
+                }
+                return Normalize(results);
+            }
+            catch (Exception ex) { FileLog.Write("ONNX 推理降级特征库：" + ex.Message); }
+        }
+
         var feat = ExtractWithOpenCv(imagePath) ?? ExtractLegacy(imagePath);
         if (feat != null)
         {

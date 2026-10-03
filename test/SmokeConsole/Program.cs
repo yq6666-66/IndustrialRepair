@@ -393,6 +393,8 @@ Check("扫码内容提取配件编码", BarcodeUtil.ExtractPartCode(decoded) == 
 
 // 9.2 OpenCV 识别引擎 V2（复用第 3 节生成的灰色圆形零件测试图）
 var recResults = new RecognitionEngine().Recognize(testImg);
+Check("识别引擎后端为特征库模式(NR8)", OnnxImageRecognizer.EngineMode.Contains("特征库"),
+      $"EngineMode={OnnxImageRecognizer.EngineMode}（未配置 Onnx 节时的正确回退）");
 Check("识别引擎V2 返回候选", recResults.Count > 0 && recResults[0].Score > 0,
       $"Top1 {recResults[0].PartName} {recResults[0].Score}%：{recResults[0].Reason}");
 Check("OpenCV 原生库可用（圆度/轮廓路径）", recResults.Any(r => r.Reason.Contains("OpenCV")),
