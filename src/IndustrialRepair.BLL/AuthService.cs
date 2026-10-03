@@ -15,9 +15,31 @@ namespace IndustrialRepair.BLL;
 public class AuthService
 {
     private readonly UserRepository _users = new();
+    private readonly IEmailSender _mailer;
 
     public const int MaxFail = 5;
     public const int LockMinutes = 10;
+
+    /// <summary>默认构造（生产）：按 appsettings 的 Smtp 节选择真实/演示发送器；测试可注入替代。</summary>
+    public AuthService(IEmailSender? mailer = null) => _mailer = mailer ?? EmailSenderFactory.Create();
+
+    /// <summary>发送验证码：SMTP 启用且邮箱非空 → 真实发信返回 null（不回显）；否则演示回退返回验证码文本。</summary>
+    private string? SendCode(string? email, string code, string purpose)
+    {
+        if (_mailer.Enabled && !string.IsNullOrWhiteSpace(email))
+        {
+            try
+            {
+                _mailer.SendVerificationCode(email, code, purpose);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                FileLog.Write($"邮件发送失败（回退演示回显）：{ex.Message}");
+            }
+        }
+        return code;
+    }
 
     /// <summary>登录第一步：用户名口令（前置条件：图形验证码已通过）</summary>
     public Result<UserInfo> Login(string userName, string password, string ip = "127.0.0.1")
@@ -56,11 +78,12 @@ public class AuthService
 
         if (user.MfaEnabled)
         {
-            // 多因素认证：生成 6 位验证码“发送到邮箱”（演示：直接回传显示）
+            // 多因素认证：生成 6 位验证码发送到邮箱（SMTP 未配置时演示回退直接回传显示）
             var code = new Random().Next(100000, 999999).ToString();
             _users.SetMfa(user.UserId, true, code);
             _users.WriteLoginLog(userName, user.UserId, false, "等待二次验证", ip);
-            return Result<UserInfo>.Fail($"MFA_REQUIRED|{code}|{user.Email ?? "user@example.com"}");
+            var echo = SendCode(user.Email, code, "登录二次验证");
+            return Result<UserInfo>.Fail($"MFA_REQUIRED|{echo}|{user.Email ?? "user@example.com"}");
         }
 
         return FinishLogin(user, ip);
@@ -125,7 +148,9 @@ public class AuthService
             return Result<string>.Fail("用户名与邮箱不匹配。");
         var code = new Random().Next(100000, 999999).ToString();
         _users.SetMfa(user.UserId, user.MfaEnabled, code);
-        return Result<string>.Ok(code, $"验证码已发送至 {email}（演示环境直接显示）");
+        var echo = SendCode(email, code, "找回密码");
+        return Result<string>.Ok(echo ?? "",
+            echo == null ? $"验证码已发送至 {email}" : $"验证码已生成（演示环境直接显示）");
     }
 
     /// <summary>找回密码第二步：验证码 + 新密码</summary>

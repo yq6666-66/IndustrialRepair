@@ -147,6 +147,23 @@ Check("注册新账号", reg.Success, reg.Message);
 var weakPwd = auth.Register("stu_weak_" + DateTime.Now.Ticks % 10000, "abc123", "弱口令", null, null);
 Check("弱口令注册被拒(R5)", !weakPwd.Success && weakPwd.Message.Contains("8"), weakPwd.Message);
 
+// 2.1 邮件通道（R1）：演示模式（测试目录无 Smtp 配置）发码仍回显
+var mfaName = "stu_mfa_" + DateTime.Now.Ticks % 10000;
+auth.Register(mfaName, "test1234", "MFA学生", null, "mfa@test.com");
+var resetR = auth.RequestResetCode(mfaName, "mfa@test.com");
+Check("演示模式找回发码回显(R1)", resetR.Success && resetR.Data!.Length == 6, $"Data={resetR.Data}");
+
+// 2.2 MFA 全流程（演示回退路径）：启用 MFA → 登录返回验证码 → VerifyMfa 通过
+var mfaUser = new UserRepository().GetByUserName(mfaName)!;
+new UserRepository().SetMfa(mfaUser.UserId, true, null);
+var mfaLogin = auth.Login(mfaName, "test1234");
+Check("MFA 登录返回待验证(R1)", !mfaLogin.Success && mfaLogin.Message.StartsWith("MFA_REQUIRED|") && mfaLogin.Message.Split('|')[1].Length == 6,
+      mfaLogin.Message);
+var mfaCode = mfaLogin.Message.Split('|')[1];
+var mfaVerify = auth.VerifyMfa(mfaName, mfaCode);
+Check("MFA 二次验证通过(R1)", mfaVerify.Success, mfaVerify.Message);
+auth.Login("reporter", "123456");   // 恢复报修人会话（后续 Report 的 SameOperator 守卫依赖它）
+
 Console.WriteLine("== 3. 工单全流程（报修人报修 → 管理员派单 → 工程师接单） ==");
 var orderSvc = new WorkOrderService();
 var devices = orderSvc.Devices();

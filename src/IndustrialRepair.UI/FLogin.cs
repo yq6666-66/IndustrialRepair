@@ -293,7 +293,11 @@ public class FLogin : UIForm
             if (result.Message.StartsWith("MFA_REQUIRED|"))
             {
                 var parts = result.Message.Split('|');
-                var code = Ui.Input($"多因素认证：验证码已发送至 {parts[2]}\n（演示环境验证码：{parts[1]}）", "验证码：");
+                // R1：验证码位为空 = 已真实发送到邮箱；非空 = 演示模式直接回显
+                var hint = string.IsNullOrEmpty(parts[1])
+                    ? $"多因素认证：验证码已发送至 {parts[2]}，请查收邮件。"
+                    : $"多因素认证：验证码已发送至 {parts[2]}\n（演示环境验证码：{parts[1]}）";
+                var code = Ui.Input(hint, "验证码：");
                 if (string.IsNullOrWhiteSpace(code)) { ShowHint("已取消二次验证。"); NewCaptcha(); return; }
                 result = _auth.VerifyMfa(_txtUser.Text.Trim(), code);
             }
@@ -360,7 +364,9 @@ public class FFindBack : UIForm
         var send = Ui.Btn("发送验证码", 240, 92, 110, 32, (_, _) =>
         {
             var r = new AuthService().RequestResetCode(name.Text.Trim(), email.Text.Trim());
-            if (r.Success) Ui.Info($"{r.Message}\n验证码：{r.Data}"); else Ui.Error(r.Message);
+            if (r.Success)
+                Ui.Info(string.IsNullOrEmpty(r.Data) ? r.Message : $"{r.Message}\n验证码：{r.Data}");
+            else Ui.Error(r.Message);
         });
         var ok = Ui.Btn("重置密码", 110, 180, 110, 34, (_, _) =>
         {
