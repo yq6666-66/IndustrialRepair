@@ -302,14 +302,20 @@ public class FMain : UIForm
     private void TickClock() =>
         _lblClock.Text = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
             + " 星期" + "日一二三四五六"[(int)DateTime.Now.DayOfWeek]
-            + "  ·  会话空闲上限 30 分钟  ·  F5 刷新当前页";
+            + "  ·  F5 刷新 · Ctrl+K 搜索";
 
-    /// <summary>F5 刷新当前页（R4 交互）。</summary>
+    /// <summary>F5 刷新 / Ctrl+K 全局搜索（R4 + OR6）。</summary>
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         if (keyData == Keys.F5 && _content.Controls.Count > 0 && _content.Controls[0] is IRefreshable page)
         {
             Ui.Busy(page.RefreshData);
+            return true;
+        }
+        if (keyData == (Keys.Control | Keys.K))
+        {
+            using var dlg = new FGlobalSearch(_user, ShowPage);
+            dlg.ShowDialog(this);
             return true;
         }
         return base.ProcessCmdKey(ref msg, keyData);

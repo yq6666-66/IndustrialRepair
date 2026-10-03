@@ -373,22 +373,104 @@ internal class FOrderDetail : UIForm
         Location = new Point(496, 14), Size = new Size(196, 140), SizeMode = PictureBoxSizeMode.Zoom,
         BackColor = Color.FromArgb(240, 240, 240), BorderStyle = BorderStyle.FixedSingle
     };
-    private readonly UIDataGridView _grid = Ui.Grid(16, 340, 680, 170);
+    private readonly UIDataGridView _grid = Ui.Grid(16, 400, 680, 170);   // OR7：下移给时间线留位
 
-    /// <summary>工单详情：信息/照片/识别候选/材料审阅/流转记录（工程师可在此人工确认零件）</summary>
+    /// <summary>工单详情：信息/照片/识别候选/材料审阅/流转时间线/流转记录（工程师可在此人工确认零件）</summary>
     public FOrderDetail(int orderId, UserInfo user)
     {
         _user = user;
         _orderId = orderId;
         Text = $"工单详情 #{orderId}";
         Ui.CloseOnEsc(this);
-        ClientSize = new Size(716, 552);
+        ClientSize = new Size(716, 620);
         StartPosition = FormStartPosition.CenterParent;
 
-        var close = Ui.Btn("关闭", 300, 520, 100, 30, (_, _) => Close());
-        Controls.AddRange(new Control[] { _info, _photo, _lblReview, _reviewActions, _grid, close });
+        var close = Ui.Btn("关闭", 300, 588, 100, 30, (_, _) => Close());
+        Controls.AddRange(new Control[] { _info, _photo, _lblReview, _reviewActions, _timeline, _grid, close });
         Reload(orderId);
     }
+
+    /// <summary>流转时间线面板（OR7：横向节点图，按时间排列）。</summary>
+    private readonly Panel _timeline = new()
+    { Location = new Point(16, 340), Size = new Size(680, 50), AutoScroll = false };
+
+    /// <summary>构建流转时间线：节点圆 + 阶段名 + 操作人 + 距上一步时长。</summary>
+    private void BuildTimeline(List<WorkOrderRecord> records)
+    {
+        _timeline.Controls.Clear();
+        _timeline.BackColor = Theme.Current.PanelBg;
+
+        if (records.Count == 0) return;
+        var stages = records.OrderBy(r => r.CreatedAt).ToList();
+
+        // 计算节点位置（均分宽度）
+        var nodeW = Math.Max(90, _timeline.Width / Math.Max(stages.Count, 1));
+        for (int i = 0; i < stages.Count; i++)
+        {
+            var rec = stages[i];
+            var x = 8 + i * nodeW;
+
+            // 连接线（最后一个节点不画）
+            if (i < stages.Count - 1)
+            {
+                var line = new Panel
+                {
+                    Location = new Point(x + 14, 20), Size = new Size(nodeW - 28, 2),
+                    BackColor = i < CurrentStageIndex(stages) ? Theme.Current.Accent : Theme.Current.Border,
+                    Anchor = AnchorStyles.None
+                };
+                _timeline.Controls.Add(line);
+            }
+
+            // 节点圆（已完成=品牌蓝，当前=绿色，未到=灰色）
+            var isDone = i <= CurrentStageIndex(stages);
+            var isCurrent = i == CurrentStageIndex(stages);
+            var dot = new Panel
+            {
+                Location = new Point(x + 6, 14), Size = new Size(14, 14),
+                BackColor = isCurrent ? Theme.Current.Success : isDone ? Theme.Current.Accent : Theme.Current.Border,
+                Anchor = AnchorStyles.None
+            };
+            // 圆角
+            dot.Region = new Region(new Rectangle(0, 0, 14, 14));
+            _timeline.Controls.Add(dot);
+
+            // 阶段名
+            var lbl = new UILabel
+            {
+                Text = WorkOrderRecord.ToChinese(rec.Action), AutoSize = true,
+                Location = new Point(x, 0), Font = new Font("微软雅黑", 8.5F, isCurrent ? FontStyle.Bold : FontStyle.Regular),
+                ForeColor = isDone ? Theme.Current.TextPrimary : Theme.Current.TextSecondary
+            };
+            _timeline.Controls.Add(lbl);
+
+            // 时间
+            var lblTime = new UILabel
+            {
+                Text = rec.CreatedAt.ToString("MM-dd HH:mm"), AutoSize = true,
+                Location = new Point(x, 30), Font = new Font("微软雅黑", 7.5F),
+                ForeColor = Theme.Current.TextSecondary
+            };
+            _timeline.Controls.Add(lblTime);
+
+            // 距上一步时长
+            if (i > 0)
+            {
+                var gap = rec.CreatedAt - stages[i - 1].CreatedAt;
+                var lblGap = new UILabel
+                {
+                    Text = gap.TotalHours >= 1 ? $"+{gap.TotalHours:F0}h" : $"+{gap.TotalMinutes:F0}m",
+                    AutoSize = true, Location = new Point(x - 28, 20),
+                    Font = new Font("微软雅黑", 7F),
+                    ForeColor = gap.TotalHours > 24 ? Theme.Current.Danger : Theme.Current.TextSecondary
+                };
+                _timeline.Controls.Add(lblGap);
+            }
+        }
+    }
+
+    /// <summary>当前所处阶段索引（最后一个记录即当前；已取消取到取消）。</summary>
+    private static int CurrentStageIndex(List<WorkOrderRecord> stages) => stages.Count - 1;
 
     /// <summary>释放照片（连同底层 MemoryStream，R4 流式加载配套）。</summary>
     private void DisposePhoto()
@@ -426,12 +508,15 @@ internal class FOrderDetail : UIForm
         BuildReviewActions(o);
 
         Text = $"工单详情 {o.OrderNo}";
+        var records = _svc.Records(orderId);
+        BuildTimeline(records);   // OR7：流转时间线
+
         var t = new System.Data.DataTable();
         t.Columns.Add("时间", typeof(string));
         t.Columns.Add("动作", typeof(string));
         t.Columns.Add("操作人", typeof(string));
         t.Columns.Add("备注", typeof(string));
-        foreach (var r in _svc.Records(orderId))
+        foreach (var r in records)
             t.Rows.Add(r.CreatedAt.ToString("MM-dd HH:mm:ss"), WorkOrderRecord.ToChinese(r.Action), r.Operator, r.Note);
         _grid.DataSource = t;
     }
