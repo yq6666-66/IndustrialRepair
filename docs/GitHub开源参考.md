@@ -8,8 +8,14 @@
 |---|---|---|---|---|---|---|
 | 1 | **SunnyUI** | [yhuse/SunnyUI](https://github.com/yhuse/SunnyUI) | ~4.0k★ GVP | **GPL-3.0-only**（以官方 NuGet 包元数据为准；此前误标 MIT 已纠正） | 3.9.8 | 全套界面控件与图表（UIForm/UIButton/UIDataGridView/UIBarChart/UILineChart），登录/主框架/大屏/各业务页 |
 | 2 | **OpenCvSharp** | [shimat/opencvsharp](https://github.com/shimat/opencvsharp) | ~6.1k★ | Apache-2.0 | 4.13.x | 拍照识别引擎 V2：CLAHE 自适应增强、中心 ROI 均值色、Canny 边缘 + 最大轮廓圆度（4πA/P²）判形状、轮廓面积占比判尺寸 |
-| 3 | **QRCoder** | [codebude/QRCoder](https://github.com/codebude/QRCoder) | ~3.7k★ | MIT | 最新 | 配件二维码标签生成（内容 `PART:编码`，含名称文字的标签图，可另存/批量打印） |
+| 3 | **QRCoder** | [codebude/QRCoder](https://github.com/codebude/QRCoder) | ~3.7k★ | MIT | 最新 | 配件二维码标签生成（内容 `PART:编码`，含名称文字的标签图，可另存/批量打印）；领料单 PDF 内嵌单号二维码 |
 | 4 | **ZXing.Net** | [micjahn/ZXing.Net](https://github.com/micjahn/ZXing.Net) | ~2.8k★ | Apache-2.0 | 最新 | 二维码/条码解码：报修照片含码直接命中配件（置信 100%）；串口页「从图片扫码」 |
+| 5 | **MailKit** | [jstedfast/MailKit](https://github.com/jstedfast/MailKit) | ~5.5k★ | Apache-2.0 | 4.18.x | 真实邮件通道（NR1）：Smtp 配置存在才启用——MFA/找回密码验证码真实发送；未配置回退演示回显 |
+| 6 | **QuestPDF** | [questpdf/questpdf](https://github.com/questpdf/questpdf) | ~12k★ | **Community 许可**（营收<$1M 免费，代码内已声明） | 2026.9.x | 领料单 PDF（抬头/明细/合计/单号二维码）与配件库存清单 PDF（NR2） |
+| 7 | **Quartz.NET** | [quartznet/quartznet](https://github.com/quartznet/quartznet) | ~6.5k★ | Apache-2.0 | 3.13.1（4.x 与 net8.0-windows TFM 不兼容） | 应用内定时任务（NR4）：每日库存预警汇总 08:30 + 每 30 分钟超时工单扫描，写操作日志并上抛通知中心 |
+| 8 | **Serilog** | [serilog/serilog](https://github.com/serilog/serilog) + [Sinks.File](https://github.com/serilog/serilog-sinks-file) | ~7k★ | Apache-2.0 | 4.4.0 + 7.0.0 | 文件日志内核（NR5）：FileLog 门面 API 不变，按日滚动、保留 14 天、多进程 shared 写 |
+| 9 | **Polly** | [App-vNext/Polly](https://github.com/App-vNext/Polly) | ~13k★ | Apache-2.0 | 8.x（Polly.Core） | SQL 瞬时故障重试管道（NR5）：LocalDB 冷启动 4 类错误号、常量退避 700ms×3 次尝试，消除 DbHelper/DbInitializer 重复实现 |
+| 10 | **OpenCvSharp（运行时）** | opencvsharp4.runtime.win | — | Apache-2.0 | 4.13.x | OpenCV 原生库（随发布分发） |
 | 5 | **ClosedXML** | [ClosedXML/ClosedXML](https://github.com/ClosedXML/ClosedXML) | ~4.6k★ | MIT | 最新 | 领料清单/维修报表/配件库存导出 .xlsx（标题、表头样式、冻结行、自适应列宽、合计行） |
 | 6 | **MQTTnet** | [dotnet/MQTTnet](https://github.com/dotnet/MQTTnet) | ~4k★（.NET 基金会） | MIT | 4.3.7.1207 | IoT 网关：应用内嵌 MqttServer(127.0.0.1:18835) + 设备遥测模拟发布/订阅 + 超阈值自动报修工单 |
 | 7 | **BCrypt.Net-Next** | [BcryptNet/bcrypt.net](https://github.com/BcryptNet/bcrypt.net) | ~1k★ | MIT | 4.2.0 | 口令 bcrypt 哈希（cost=11） |

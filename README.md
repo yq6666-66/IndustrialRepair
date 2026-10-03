@@ -18,7 +18,27 @@
 
 ### 直接使用的热门开源项目（许可证以官方 NuGet 元数据为准，详见 docs/GitHub开源参考.md）
 
-SunnyUI 3.9.8（**GPL-3.0-only**，课堂教学/课设使用；注意其传染性——发布二进制需遵循 GPL）· OpenCvSharp（Apache-2.0）· QRCoder（MIT）· ZXing.Net（Apache-2.0）· ClosedXML（MIT）· MQTTnet 4.3.7（MIT）· BCrypt.Net-Next（MIT）· xunit / Microsoft.NET.Test.Sdk（Apache-2.0）
+SunnyUI 3.9.8（**GPL-3.0-only**，课堂教学/课设使用；注意其传染性——发布二进制需遵循 GPL）· OpenCvSharp（Apache-2.0）· QRCoder（MIT）· ZXing.Net（Apache-2.0）· ClosedXML（MIT）· MQTTnet 4.3.7（MIT）· BCrypt.Net-Next（MIT）· xunit / Microsoft.NET.Test.Sdk（Apache-2.0）· **MailKit（Apache-2.0，真实邮件通道）· QuestPDF（Community 许可，PDF 导出）· Quartz.NET 3.13（Apache-2.0，定时任务）· Serilog + Sinks.File（Apache-2.0，日志内核）· Polly（Apache-2.0，SQL 重试）**
+
+### SMTP 真实邮件配置（可选；不配置即演示模式）
+
+复制 publish 目录后编辑 `appsettings.json`：
+
+```json
+{
+  "ConnectionString": "Server=(localdb)\\MSSQLLocalDB;Database=IndustrialRepairDb;Trusted_Connection=True;TrustServerCertificate=True",
+  "Smtp": {
+    "Host": "smtp.qq.com",
+    "Port": 465,
+    "User": "你的QQ号@qq.com",
+    "Password": "QQ邮箱设置→账户→开启SMTP后生成的授权码",
+    "From": "你的QQ号@qq.com",
+    "Ssl": true
+  }
+}
+```
+
+配置齐全后 MFA/找回密码验证码**真实发送到邮箱且不再界面回显**；发送失败自动回退演示并记日志。163 邮箱同理（smtp.163.com，授权码在 POP3/SMTP 设置中开启）。
 
 ## 快速开始
 
