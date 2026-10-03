@@ -80,6 +80,21 @@ internal class UcWorkOrders : UserControl, IRefreshable
 
         Ui.BindEnter(_txtKey, () => LoadPage(1, 50));   // 回车即查（回第一页）
         Ui.BindRowDblClick(_grid, _ => ShowDetail()); // 行双击=详情（与按钮同一入口）
+        _grid.CellFormatting += GridSlaColor;         // OR5：SLA 超时颜色编码
+    }
+
+    /// <summary>SLA 颜色编码（OR5）：活跃工单停滞 >24h 黄底 / >48h 红底。</summary>
+    private void GridSlaColor(object? sender, DataGridViewCellFormattingEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.RowIndex >= _grid.Rows.Count) return;
+        var row = _grid.Rows[e.RowIndex];
+        if (row.DataBoundItem is not System.Data.DataRowView drv) return;
+        var status = drv.Row.Table.Columns.Contains("状态") ? drv.Row["状态"].ToString() : "";
+        if (status is not ("待派单" or "已派单" or "维修中")) return;
+        if (!drv.Row.Table.Columns.Contains("CreatedAt") || drv.Row["CreatedAt"] == DBNull.Value) return;
+        var hours = (DateTime.Now - (DateTime)drv.Row["CreatedAt"]).TotalHours;
+        if (hours > 48) row.DefaultCellStyle.BackColor = Color.FromArgb(255, 224, 224);
+        else if (hours > 24) row.DefaultCellStyle.BackColor = Color.FromArgb(255, 248, 224);
     }
 
     private static readonly Dictionary<string, string> StatusMap = new()

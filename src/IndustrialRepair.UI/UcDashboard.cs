@@ -21,10 +21,13 @@ internal class UcDashboard : UserControl, IRefreshable
     private readonly UILineChart _lineTrend = new() { Dock = DockStyle.Fill };
     private readonly UIBarChart _barEngineer = new() { Dock = DockStyle.Fill };
     private readonly UIDataGridView _gridLow = Ui.Grid(0, 0, 100, 100);
+    private readonly System.Windows.Forms.Timer _autoTimer = new();
+    private UIButton _btnAuto = null!;
+    private bool _autoRefresh;
 
     public UcDashboard()
     {
-        // ---- 汇总卡片（6 张：含 R3 库存总价值）+ CSV 导出（山海鲸等外部大屏的数据源） ----
+        // ---- 汇总卡片（6 张：含 R3 库存总价值）+ CSV 导出 + 自动刷新 + 全屏（OR4）----
         var top = new Panel { Dock = DockStyle.Top, Height = 86, Padding = new Padding(6) };
         var btnCsv = Ui.Btn("导出CSV\n(大屏数据源)", 0, 0, 118, 60);
         btnCsv.Dock = DockStyle.Right;
@@ -35,6 +38,33 @@ internal class UcDashboard : UserControl, IRefreshable
             catch (Exception ex) { Ui.Error("导出失败：" + ex.Message); }
         };
         top.Controls.Add(btnCsv);
+
+        // OR4：自动刷新（30 秒）+ 全屏按钮
+        _btnAuto = Ui.Btn("自动刷新\n(关)", 0, 0, 96, 60);
+        _btnAuto.Dock = DockStyle.Right;
+        _btnAuto.Font = new Font("微软雅黑", 8.5F);
+        _btnAuto.Click += (_, _) =>
+        {
+            _autoRefresh = !_autoRefresh;
+            _btnAuto.Text = _autoRefresh ? "自动刷新\n(30s 开)" : "自动刷新\n(关)";
+            if (_autoRefresh) _autoTimer.Start(); else _autoTimer.Stop();
+        };
+        top.Controls.Add(_btnAuto);
+
+        var btnFull = Ui.Btn("全屏\n(F11)", 0, 0, 76, 60);
+        btnFull.Dock = DockStyle.Right;
+        btnFull.Font = new Font("微软雅黑", 8.5F);
+        btnFull.Click += (_, _) => ToggleFullscreen();
+        top.Controls.Add(btnFull);
+
+        _autoTimer.Interval = 30_000;
+        _autoTimer.Tick += (_, _) => SafeRefresh();
+        Disposed += (_, _) => { _autoTimer.Stop(); _autoTimer.Dispose(); };
+
+        // F11 切换全屏（OR4）
+        var parentForm = FindForm();
+        if (parentForm != null)
+            parentForm.KeyDown += (_, e) => { if (e.KeyCode == Keys.F11 && Visible) ToggleFullscreen(); };
         string[] names = { "今日工单", "待派单", "维修中", "已完成", "本月材料成本(元)", "库存总价值(元)" };
         for (int i = 0; i < 6; i++)
         {
@@ -91,6 +121,37 @@ internal class UcDashboard : UserControl, IRefreshable
         grid.Anchor = AnchorStyles.None;
         p.Controls.Add(grid);
         return p;
+    }
+
+    /// <summary>线程安全刷新（定时器回调）。</summary>
+    private void SafeRefresh()
+    {
+        if (IsDisposed || !IsHandleCreated) return;
+        if (InvokeRequired) BeginInvoke(RefreshData);
+        else RefreshData();
+    }
+
+    /// <summary>全屏切换（OR4：大屏页独占显示器，再按 F11/按钮恢复）。</summary>
+    private void ToggleFullscreen()
+    {
+        var form = FindForm();
+        if (form == null) return;
+        if (form.FormBorderStyle == FormBorderStyle.None)
+        {
+            form.FormBorderStyle = FormBorderStyle.Sizable;
+            form.WindowState = FormWindowState.Maximized;
+            form.TopMost = false;
+        }
+        else
+        {
+            form.FormBorderStyle = FormBorderStyle.None;
+            form.WindowState = FormWindowState.Maximized;
+            form.TopMost = true;
+            // 隐藏侧边导航（仅大屏内容可见）
+            foreach (Control c in form.Controls)
+                if (c is Panel p && p.Dock == DockStyle.Left && p.Width <= 220)
+                    p.Visible = false;
+        }
     }
 
     public void RefreshData()
