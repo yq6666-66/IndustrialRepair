@@ -58,6 +58,9 @@ public class PickingService
     public DataTable List(string? status, string? keyword) => _repo.List(status, keyword);
     public List<PickingItem> Items(int pickingId) => _repo.GetItems(pickingId);
 
+    /// <summary>领料单 PDF 导出（QuestPDF，Community 许可；返回文件路径）</summary>
+    public string ExportPdf(int pickingId) => PdfService.ExportPickingPdf(pickingId);
+
     /// <summary>导出领料清单 CSV（供仓库打印/对账）</summary>
     public string ExportCsv(int pickingId)
     {

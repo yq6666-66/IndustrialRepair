@@ -70,12 +70,25 @@ internal class UcParts : UserControl, IRefreshable
         });
         var btnQr = Ui.Btn("生成二维码", 300, 46, 100, 32, OnGenerateQr);
         var btnXls = Ui.Btn("导出Excel", 410, 46, 90, 32, OnExportExcel);
+        var btnPdf = Ui.Btn("导出PDF", 510, 46, 90, 32, (_, _) =>
+        {
+            try
+            {
+                if (!_listMode) { Ui.Error("库存预警/流水视图不支持 PDF 导出，请先查询配件列表。"); return; }
+                if (_grid.DataSource is not System.Data.DataTable t || t.Rows.Count == 0)
+                { Ui.Error("当前无数据可导出。"); return; }
+                var view = t.Copy();
+                view.Columns.Remove("PartId");                    // 内部列不进 PDF
+                Ui.Info("已导出：" + BLL.PdfService.ExportTablePdf("配件库存清单", view, qrText: "PART-INVENTORY"));
+            }
+            catch (Exception ex) { Ui.Error("PDF 导出失败：" + ex.Message); }
+        });
 
         var toolbar = new Panel { Dock = DockStyle.Top, Height = 84 };
         toolbar.Controls.AddRange(new Control[]
         {
             Ui.Lbl("关键字：", 4, 14, 80), _txtKey, Ui.Lbl("类别：", 346, 14, 48), _cmbCat,
-            btnQuery, btnAdd, btnEdit, btnDel, btnIn, btnLow, btnLog, btnQr, btnXls
+            btnQuery, btnAdd, btnEdit, btnDel, btnIn, btnLow, btnLog, btnQr, btnXls, btnPdf
         });
 
         // Dock 布局（同 FMain 模式）：填充控件先加，标题条最后加；分页条在工具栏之下

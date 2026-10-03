@@ -268,6 +268,16 @@ if (gen.Success)
                   expected.All(e => actualQty.TryGetValue(e.PartId, out var q) && q == (int)e.Qty);
     Check("C#算料与存储过程数量一致(整机BOM)", parity, $"BOM {expected.Count} 项");
 
+    var pickPdf = pick.ExportPdf(gen.Data);
+    bool pdfMagic = false;
+    if (File.Exists(pickPdf))
+    {
+        using var fs = File.OpenRead(pickPdf);
+        var head = new byte[4];
+        pdfMagic = fs.Read(head, 0, 4) == 4 && head[0] == (byte)'%' && head[1] == (byte)'P'
+                             && head[2] == (byte)'D' && head[3] == (byte)'F' && fs.Length > 1024;
+    }
+    Check("领料单PDF导出(NR2)", pdfMagic, pickPdf);
     var snap = DbHelper.ExecuteScalar("SELECT ReviewSnapshot FROM dbo.picking_list WHERE PickingId=@Id",
         CommandType.Text, DbHelper.P("@Id", gen.Data))?.ToString();
     Check("领料单保存审阅快照", !string.IsNullOrEmpty(snap) && snap.Contains("BomOnly"), snap ?? "");

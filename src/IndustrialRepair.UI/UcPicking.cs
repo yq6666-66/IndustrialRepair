@@ -51,6 +51,13 @@ internal class UcPicking : UserControl, IRefreshable
         var btnGen = Ui.Btn("为工单算料", 340, 10, 105, 32, OnGenerate);
         var btnIssue = Ui.Btn("领料出库", 460, 10, 95, 32, OnIssue);
         var btnExport = Ui.Btn("导出Excel", 570, 10, 95, 32, OnExport);
+        var btnPdf = Ui.Btn("导出PDF", 675, 10, 95, 32, (_, _) =>
+        {
+            var id = SelectedPickingId();
+            if (id == 0) { Ui.Error("请先选择领料单。"); return; }
+            try { Ui.Info("已导出：" + _svc.ExportPdf(id)); }
+            catch (Exception ex) { Ui.Error("PDF 导出失败：" + ex.Message); }
+        });
         var lblHint = new UILabel
         {
             Text = "整机 BOM 配料：确认零件仅标记重点（★），BOM 外补充件按人工用量追加；工单需先在详情页完成材料审阅。",
@@ -64,7 +71,7 @@ internal class UcPicking : UserControl, IRefreshable
         var toolbar = new Panel { Dock = DockStyle.Top, Height = 54 };
         toolbar.Controls.AddRange(new Control[]
         {
-            Ui.Lbl("状态：", 10, 14, 76), _cmbStatus, btnQuery, btnGen, btnIssue, btnExport, lblHint
+            Ui.Lbl("状态：", 10, 14, 76), _cmbStatus, btnQuery, btnGen, btnIssue, btnExport, btnPdf, lblHint
         });
 
         // 上：领料单列表；下：明细 + 汇总（水平 SplitContainer 消除锚点互挤）
