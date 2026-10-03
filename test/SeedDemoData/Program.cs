@@ -39,10 +39,11 @@ var pickRepo = new PickingRepository();
 var rnd = new Random(20261003);   // 固定种子：可复现
 // NR9：Bogus 随机化器生成逼真故障描述（固定种子可复现）
 var bogus = new Bogus.Randomizer(20261003);
-string NextFault() =>
-    $"{bogus.PickRandom(new[] { "主轴", "液压站", "输送带", "电柜", "减速机", "冷却水", "气动", "导轨" })}" +
-    $"{bogus.PickRandom(new[] { "异响，温度偏高", "压力波动，油缸渗油", "跑偏，托辊磨损", "接触器频繁跳闸", "渗油，密封老化", "温升异常，流量不足", "漏气，压力下降", "润滑不足，阻力增大" })}" +
-    $"（{bogus.PickRandom(new[] { "需现场确认", "已通知工艺", "影响产量", "临时处理中", "班中巡检发现" })}）";
+string[] locations = { "主轴", "液压站", "输送带", "电柜", "减速机", "冷却水", "气动", "导轨" };
+string[] symptoms = { "异响，温度偏高", "压力波动，油缸渗油", "跑偏，托辊磨损", "接触器频繁跳闸",
+                      "渗油，密封老化", "温升异常，流量不足", "漏气，压力下降", "润滑不足，阻力增大" };
+string[] notes = { "需现场确认", "已通知工艺", "影响产量", "临时处理中", "班中巡检发现" };
+string NextFault() => $"{bogus.ArrayElement(locations)}{bogus.ArrayElement(symptoms)}（{bogus.ArrayElement(notes)}）";
 string[] types = { "机械", "电气", "液压", "其他" };
 
 int created = 0, reviewed = 0, picked = 0, issued = 0, done = 0;

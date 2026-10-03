@@ -25,3 +25,5 @@ docs/exports/
 
 # 发布候选目录：磁盘留档即可，不入库（含二进制）
 publish_candidate/
+models/*.onnx
+models/imagenet_parts*.txt
