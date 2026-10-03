@@ -14,20 +14,13 @@ public static class DbHelper
 {
     private static SqlConnection Open()
     {
-        // LocalDB 冷启动可能较慢/瞬时失败：最多重试 3 次（工程化优化）
-        for (int attempt = 1; ; attempt++)
+        // LocalDB 冷启动可能较慢/瞬时失败：Polly 管道重试（NR5，行为与历史手写循环一致）
+        return SqlResilience.Retry.Execute(() =>
         {
-            try
-            {
-                var conn = new SqlConnection(Db.ConnectionString);
-                conn.Open();
-                return conn;
-            }
-            catch (SqlException ex) when (attempt < 3 && (ex.Number == -2 || ex.Number == 4060 || ex.Number == 233 || ex.Number == 10061))
-            {
-                System.Threading.Thread.Sleep(700 * attempt);   // LocalDB 实例自动拉起等待
-            }
-        }
+            var conn = new SqlConnection(Db.ConnectionString);
+            conn.Open();
+            return conn;
+        });
     }
 
     /// <summary>增删改（含存储过程）</summary>

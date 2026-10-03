@@ -9,6 +9,8 @@ using MQTTnet;
 using MQTTnet.Client;
 using MQTTnet.Protocol;
 using MQTTnet.Server;
+using Serilog;                  // NR5：FileLoggerConfigurationExtensions 扩展类所在命名空间
+using Serilog.Configuration;   // NR5：Sinks.File 7.x 的 File 扩展接收方类型所在
 
 namespace IndustrialRepair.BLL;
 
@@ -187,24 +189,55 @@ public class MqttGateway : IDisposable
 public static class FileLog
 {
     private static readonly object Lock = new();
+    private static Serilog.ILogger? _logger;
+
     public static string LogDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                      "IndustrialRepair", "logs");
 
+    /// <summary>Serilog 内核（NR5）：按日滚动 + 保留 14 天；shared 允许多进程并行写同目录。</summary>
+    private static Serilog.ILogger Logger
+    {
+        get
+        {
+            if (_logger != null) return _logger;
+            lock (Lock)
+            {
+                if (_logger != null) return _logger;
+                Directory.CreateDirectory(LogDir);
+                _logger = new Serilog.LoggerConfiguration()
+                    .MinimumLevel.Debug()
+                    .WriteTo.File(
+                        Path.Combine(LogDir, "app_.log"),
+                        rollingInterval: Serilog.RollingInterval.Day,
+                        retainedFileCountLimit: 14,
+                        shared: true,
+                        outputTemplate: "{Timestamp:HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+                    .CreateLogger();
+                return _logger;
+            }
+        }
+    }
+
     public static void Write(string message)
     {
-        try
-        {
-            Directory.CreateDirectory(LogDir);
-            var file = Path.Combine(LogDir, $"app_{DateTime.Now:yyyyMMdd}.log");
-            lock (Lock)
-                File.AppendAllText(file, $"[{DateTime.Now:HH:mm:ss.fff}] {message}{Environment.NewLine}");
-        }
+        try { Logger.Information("{Message}", message); }
         catch { /* 日志失败不再抛出 */ }
     }
 
     public static void Write(Exception ex, string context = "")
     {
-        Write($"{context} 异常：{ex.GetType().Name}: {ex.Message}\r\n   堆栈：{ex.StackTrace}");
+        try { Logger.Error(ex, "{Context}", context); }
+        catch { }
+    }
+
+    /// <summary>进程退出前刷新缓冲（Program 退出路径调用）。</summary>
+    public static void CloseAndFlush()
+    {
+        lock (Lock)
+        {
+            try { (_logger as IDisposable)?.Dispose(); } catch { }
+            _logger = null;
+        }
     }
 }

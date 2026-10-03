@@ -217,12 +217,11 @@ SELECT
 
     private static void OpenWithRetry(SqlConnection conn)
     {
-        for (int attempt = 1; ; attempt++)
+        // 与 DbHelper.Open 共用 Polly 管道（NR5，消除重复实现）
+        SqlResilience.Retry.Execute(() =>
         {
-            try { conn.Open(); return; }
-            catch (SqlException ex) when (attempt < 3 && (ex.Number == -2 || ex.Number == 4060 || ex.Number == 233 || ex.Number == 10061))
-            { System.Threading.Thread.Sleep(700 * attempt); }
-        }
+            if (conn.State != System.Data.ConnectionState.Open) conn.Open();
+        });
     }
 
     private static string Sha256(string text)
