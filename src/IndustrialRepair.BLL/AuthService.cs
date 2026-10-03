@@ -98,7 +98,8 @@ public class AuthService
     {
         if (string.IsNullOrWhiteSpace(userName) || userName.Length < 3)
             return Result.Fail("用户名至少 3 个字符。");
-        if (password.Length < 6) return Result.Fail("密码至少 6 位。");
+        var policy = PasswordPolicy.Check(password);
+        if (!policy.Success) return policy;
         if (string.IsNullOrWhiteSpace(realName)) return Result.Fail("请填写真实姓名。");
         if (_users.GetByUserName(userName) != null) return Result.Fail("用户名已存在。");
 
@@ -134,7 +135,8 @@ public class AuthService
         if (user == null) return Result.Fail("用户不存在。");
         if (string.IsNullOrWhiteSpace(user.MfaCode) || user.MfaCode != code.Trim())
             return Result.Fail("验证码错误或已失效。");
-        if (newPassword.Length < 6) return Result.Fail("密码至少 6 位。");
+        var resetPolicy = PasswordPolicy.Check(newPassword);
+        if (!resetPolicy.Success) return resetPolicy;
         _users.UpdatePassword(user.UserId, PasswordHasher.Hash(newPassword));
         _users.SetMfa(user.UserId, user.MfaEnabled, null);
         _users.WriteOpLog(user.UserId, userName, "系统", "找回密码", "通过邮箱验证码重置");
@@ -146,7 +148,8 @@ public class AuthService
     {
         var hash = _users.GetPasswordHash(userId) ?? "";
         if (!PasswordHasher.Verify(oldPassword, hash)) return Result.Fail("原密码错误。");
-        if (newPassword.Length < 6) return Result.Fail("新密码至少 6 位。");
+        var changePolicy = PasswordPolicy.Check(newPassword);
+        if (!changePolicy.Success) return changePolicy;
         _users.UpdatePassword(userId, PasswordHasher.Hash(newPassword));
         return Result.Ok("密码修改成功。");
     }

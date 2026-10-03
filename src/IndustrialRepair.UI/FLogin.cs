@@ -195,6 +195,18 @@ public class FLogin : UIForm
         catch { /* 偏好写入失败忽略 */ }
     }
 
+    /// <summary>本机首个非回环 IPv4（登录日志留真实来源，替代写死 127.0.0.1）。</summary>
+    private static string ClientIp()
+    {
+        try
+        {
+            return System.Net.Dns.GetHostAddresses(System.Net.Dns.GetHostName())
+                .FirstOrDefault(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
+                                     && !a.ToString().StartsWith("127."))?.ToString() ?? "127.0.0.1";
+        }
+        catch { return "127.0.0.1"; }
+    }
+
     private void ShowHint(string msg)
     {
         _lblHint.Text = msg;
@@ -273,8 +285,9 @@ public class FLogin : UIForm
             NewCaptcha();
             return;
         }
+        NewCaptcha();   // R5：验证码一次性——通过校验即作废，重试必须使用新码
 
-        var result = _auth.Login(_txtUser.Text.Trim(), _txtPwd.Text);
+        var result = _auth.Login(_txtUser.Text.Trim(), _txtPwd.Text, ClientIp());
         if (!result.Success)
         {
             if (result.Message.StartsWith("MFA_REQUIRED|"))
@@ -307,7 +320,7 @@ public class FRegister : UIForm
         var real = Ui.Txt("真实姓名", 100, 58, 230);
         var phone = Ui.Txt("手机号（选填）", 100, 96, 230);
         var email = Ui.Txt("邮箱（找回密码用）", 100, 134, 230);
-        var pwd = Ui.Txt("密码（≥6位）", 100, 172, 230, password: true);
+        var pwd = Ui.Txt("密码（至少8位，含字母和数字）", 100, 172, 230, password: true);
 
         var ok = Ui.Btn("注册", 100, 218, 110, 34, (_, _) =>
         {
@@ -342,7 +355,7 @@ public class FFindBack : UIForm
         var name = Ui.Txt("用户名", 110, 20, 240);
         var email = Ui.Txt("注册时填写的邮箱", 110, 58, 240);
         var code = Ui.Txt("邮箱验证码", 110, 96, 120);
-        var pwd = Ui.Txt("新密码（≥6位）", 110, 134, 240, password: true);
+        var pwd = Ui.Txt("新密码（至少8位，含字母和数字）", 110, 134, 240, password: true);
 
         var send = Ui.Btn("发送验证码", 240, 92, 110, 32, (_, _) =>
         {
@@ -378,7 +391,7 @@ public class FChangePwd : UIForm
         ClientSize = new Size(370, 230); StartPosition = FormStartPosition.CenterParent;
 
         var old = Ui.Txt("当前密码", 100, 20, 230, password: true);
-        var pwd = Ui.Txt("新密码（≥6位）", 100, 58, 230, password: true);
+        var pwd = Ui.Txt("新密码（至少8位，含字母和数字）", 100, 58, 230, password: true);
         var pwd2 = Ui.Txt("再次输入新密码", 100, 96, 230, password: true);
 
         var ok = Ui.Btn("确定", 100, 144, 110, 34, (_, _) =>

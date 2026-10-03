@@ -142,8 +142,10 @@ Check("admin 拥有 user.manage 权限(RBAC)", okLogin.Data?.HasPerm("user.manag
 var rep = auth.Login("reporter", "123456");
 Check("reporter 登录成功", rep.Success, rep.Message);
 Check("reporter 无 user.manage 权限", rep.Data?.HasPerm("user.manage") != true);
-var reg = auth.Register("stu_test_" + DateTime.Now.Ticks % 10000, "abc123", "测试学生", "13800000000", "stu@test.com");
+var reg = auth.Register("stu_test_" + DateTime.Now.Ticks % 10000, "test1234", "测试学生", "13800000000", "stu@test.com");
 Check("注册新账号", reg.Success, reg.Message);
+var weakPwd = auth.Register("stu_weak_" + DateTime.Now.Ticks % 10000, "abc123", "弱口令", null, null);
+Check("弱口令注册被拒(R5)", !weakPwd.Success && weakPwd.Message.Contains("8"), weakPwd.Message);
 
 Console.WriteLine("== 3. 工单全流程（报修人报修 → 管理员派单 → 工程师接单） ==");
 var orderSvc = new WorkOrderService();
