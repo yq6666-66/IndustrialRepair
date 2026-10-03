@@ -165,6 +165,34 @@ public class FLogin : UIForm
         KeyPreview = true;
         KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) OnLogin(null, EventArgs.Empty); };
         NewCaptcha();
+        LoadLastUser();   // R4：记住上次登录用户名（仅用户名，不含任何口令）
+    }
+
+    /// <summary>本地偏好：上次登录用户名（%LocalAppData%\IndustrialRepair\ui.json）。</summary>
+    private static string PrefFile =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                     "IndustrialRepair", "ui.json");
+
+    private void LoadLastUser()
+    {
+        try
+        {
+            if (!File.Exists(PrefFile)) return;
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(PrefFile));
+            if (doc.RootElement.TryGetProperty("lastUser", out var u))
+                _txtUser.Text = u.GetString() ?? "";
+        }
+        catch { /* 偏好读取失败忽略 */ }
+    }
+
+    private static void SaveLastUser(string userName)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(PrefFile)!);
+            File.WriteAllText(PrefFile, $"{{\"lastUser\":{System.Text.Json.JsonSerializer.Serialize(userName)}}}");
+        }
+        catch { /* 偏好写入失败忽略 */ }
     }
 
     private void ShowHint(string msg)
@@ -260,6 +288,7 @@ public class FLogin : UIForm
         }
 
         LoggedUser = result.Data;
+        SaveLastUser(_txtUser.Text.Trim());
         DialogResult = DialogResult.OK;
         Close();
     }
@@ -271,6 +300,7 @@ public class FRegister : UIForm
     public FRegister()
     {
         Text = "注册账号";
+        Ui.CloseOnEsc(this);
         ClientSize = new Size(380, 300); StartPosition = FormStartPosition.CenterParent;
 
         var name = Ui.Txt("用户名（登录用）", 100, 20, 230);
@@ -306,6 +336,7 @@ public class FFindBack : UIForm
     public FFindBack()
     {
         Text = "找回密码";
+        Ui.CloseOnEsc(this);
         ClientSize = new Size(390, 290); StartPosition = FormStartPosition.CenterParent;
 
         var name = Ui.Txt("用户名", 110, 20, 240);
@@ -343,6 +374,7 @@ public class FChangePwd : UIForm
     public FChangePwd(int userId, string? userName)
     {
         Text = "修改密码";
+        Ui.CloseOnEsc(this);
         ClientSize = new Size(370, 230); StartPosition = FormStartPosition.CenterParent;
 
         var old = Ui.Txt("当前密码", 100, 20, 230, password: true);

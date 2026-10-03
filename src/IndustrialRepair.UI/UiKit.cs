@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.IO;
 using System.Windows.Forms;
 using Sunny.UI;
 
@@ -69,6 +70,38 @@ internal static class Ui
         g.AlternatingRowsDefaultCellStyle.SelectionBackColor = Color.FromArgb(41, 108, 202);
         g.AlternatingRowsDefaultCellStyle.SelectionForeColor = Color.White;
         return g;
+    }
+
+    /// <summary>忙碌光标包装：数据库/导出等操作期间显示等待光标，异常也复位。</summary>
+    public static void Busy(Action body)
+    {
+        Cursor.Current = Cursors.WaitCursor;
+        try { body(); }
+        finally { Cursor.Current = Cursors.Default; }
+    }
+
+    /// <summary>ESC 关闭对话框（无 CancelButton 的轻量对话框统一行为）。</summary>
+    public static void CloseOnEsc(Form form)
+    {
+        form.KeyPreview = true;
+        form.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) form.Close(); };
+    }
+
+    /// <summary>
+    /// 照片流式加载（R4）：Image.FromFile 会锁文件至 Dispose，改字节流加载，
+    /// 底层 MemoryStream 存入 Image.Tag 防止提前回收。
+    /// </summary>
+    public static Image? LoadImageNoLock(string? path)
+    {
+        if (path == null || !File.Exists(path)) return null;
+        try
+        {
+            var ms = new MemoryStream(File.ReadAllBytes(path));
+            var img = Image.FromStream(ms);
+            img.Tag = ms;
+            return img;
+        }
+        catch { return null; }
     }
 
     public static void Info(string msg) => MessageBox.Show(msg, "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);

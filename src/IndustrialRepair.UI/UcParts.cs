@@ -20,6 +20,11 @@ internal class UcParts : UserControl, IRefreshable
     private readonly UIComboBox _cmbCat = Ui.Combo(400, 12, 140);
     private readonly UIDataGridView _grid = MakeFillGrid();
     private readonly UiPager _pager = null!;
+    private readonly UILabel _lblEmpty = new()
+    {
+        Dock = DockStyle.Top, Height = 26, Text = "未查询到配件（可调整关键字或类别）", TextAlign = ContentAlignment.MiddleCenter,
+        ForeColor = Color.FromArgb(140, 150, 165), Font = new Font("微软雅黑", 9.5F), BackColor = Color.White, Visible = false
+    };
     /// <summary>当前是否为配件列表模式（库存预警/流水视图下禁用行双击编辑）</summary>
     private bool _listMode = true;
 
@@ -76,6 +81,7 @@ internal class UcParts : UserControl, IRefreshable
         // Dock 布局（同 FMain 模式）：填充控件先加，标题条最后加；分页条在工具栏之下
         _pager = new UiPager((page, size) => LoadParts(page, size));
         Controls.Add(_grid);
+        Controls.Add(_lblEmpty);
         Controls.Add(toolbar);
         Controls.Add(_pager);
         Controls.Add(Ui.PageHeader("备件库管理", "检索 · 维护 · 入库 · 预警 · 流水 · 二维码 · Excel"));
@@ -126,23 +132,27 @@ internal class UcParts : UserControl, IRefreshable
     /// <summary>刷新当前页（IRefreshable / 切页签入口）。</summary>
     public void RefreshData() => LoadParts(_currentPage, _pageSize);
 
-    /// <summary>分页加载配件列表（R1：OFFSET-FETCH）。</summary>
+    /// <summary>分页加载配件列表（R1：OFFSET-FETCH；R4：忙碌光标+空态）。</summary>
     private void LoadParts(int page, int size)
     {
-        try
+        Ui.Busy(() =>
         {
-            _listMode = true;
-            _currentPage = page; _pageSize = size;
-            int? cat = null;
-            if (_cmbCat.SelectedIndex > 0)
-                cat = _svc.Categories().FirstOrDefault(c => c.CategoryName == _cmbCat.Text)?.CategoryId;
-            var r = BLL.PagedQuery.Parts(_txtKey.Text.Trim(), cat, page, size);
-            var t = Translate(r.Items);
-            _grid.DataSource = t;
-            _pager.Show(r);
-            RenameColumns();
-        }
-        catch (Exception ex) { Ui.Error(DAL.DbHelper.FriendlyError(ex)); }
+            try
+            {
+                _listMode = true;
+                _currentPage = page; _pageSize = size;
+                int? cat = null;
+                if (_cmbCat.SelectedIndex > 0)
+                    cat = _svc.Categories().FirstOrDefault(c => c.CategoryName == _cmbCat.Text)?.CategoryId;
+                var r = BLL.PagedQuery.Parts(_txtKey.Text.Trim(), cat, page, size);
+                var t = Translate(r.Items);
+                _grid.DataSource = t;
+                _lblEmpty.Visible = t.Rows.Count == 0;
+                _pager.Show(r);
+                RenameColumns();
+            }
+            catch (Exception ex) { Ui.Error(DAL.DbHelper.FriendlyError(ex)); }
+        });
     }
 
     private static System.Data.DataTable Translate(System.Data.DataTable src)
@@ -234,6 +244,7 @@ internal class FQrPreview : UIForm
     public FQrPreview(string imageFile, Part part)
     {
         Text = $"二维码标签 - {part.PartCode}";
+        Ui.CloseOnEsc(this);
         ClientSize = new Size(340, 470);
         StartPosition = FormStartPosition.CenterParent;
 
@@ -285,6 +296,7 @@ internal class FPartEdit : UIForm
     {
         _part = part; _cats = cats;
         Text = part == null ? "新增配件" : "编辑配件";
+        Ui.CloseOnEsc(this);
         ClientSize = new Size(360, 320);
         StartPosition = FormStartPosition.CenterParent;
 

@@ -25,6 +25,11 @@ internal class UcWorkOrders : UserControl, IRefreshable
     private readonly UICheckBox _chkMine = new() { Text = "仅我的", Location = new Point(470, 15), Size = new Size(70, 26) };
     private readonly UIDataGridView _grid = FillGrid();
     private readonly UiPager _pager = null!;   // 构造中初始化（需引用本页加载方法）
+    private readonly UILabel _lblEmpty = new()
+    {
+        Dock = DockStyle.Top, Height = 26, Text = "未查询到符合条件的工单", TextAlign = ContentAlignment.MiddleCenter,
+        ForeColor = Color.FromArgb(140, 150, 165), Font = new Font("微软雅黑", 9.5F), BackColor = Color.White, Visible = false
+    };
 
     private static UIDataGridView FillGrid()
     {
@@ -68,6 +73,7 @@ internal class UcWorkOrders : UserControl, IRefreshable
         // Dock 布局（同 FMain 模式）：填充控件先加，标题条最后加；分页条在工具栏之下
         _pager = new UiPager((page, size) => LoadPage(page, size));
         Controls.Add(_grid);
+        Controls.Add(_lblEmpty);
         Controls.Add(toolbar);
         Controls.Add(_pager);
         Controls.Add(Ui.PageHeader("工单中心", "报修 · 派单 · 接单 · 完工 · 材料审阅入口"));
@@ -88,33 +94,37 @@ internal class UcWorkOrders : UserControl, IRefreshable
     private int _currentPage = 1;
     private int _pageSize = 50;
 
-    /// <summary>分页加载工单列表（R1：OFFSET-FETCH，避免全量拉取）。</summary>
+    /// <summary>分页加载工单列表（R1：OFFSET-FETCH，避免全量拉取；R4：忙碌光标+空态）。</summary>
     private void LoadPage(int page, int size)
     {
-        try
+        Ui.Busy(() =>
         {
-            _currentPage = page; _pageSize = size;
-            var status = _cmbStatus.SelectedIndex == 0 ? null : StatusMap[_cmbStatus.Text];
-            var r = BLL.PagedQuery.WorkOrders(status, _txtKey.Text.Trim(), _chkMine.Checked, _user.UserId, page, size);
-            var t = r.Items;
-            if (t.Columns.Contains("Status")) t.Columns["Status"]!.ColumnName = "状态";
-            if (t.Columns.Contains("Priority")) t.Columns["Priority"]!.ColumnName = "优先级";
-            if (t.Columns.Contains("FaultDesc")) t.Columns["FaultDesc"]!.ColumnName = "故障描述";
-            if (t.Columns.Contains("MaterialReviewMode"))
+            try
             {
-                t.Columns["MaterialReviewMode"]!.ColumnName = "材料审阅";
+                _currentPage = page; _pageSize = size;
+                var status = _cmbStatus.SelectedIndex == 0 ? null : StatusMap[_cmbStatus.Text];
+                var r = BLL.PagedQuery.WorkOrders(status, _txtKey.Text.Trim(), _chkMine.Checked, _user.UserId, page, size);
+                var t = r.Items;
+                if (t.Columns.Contains("Status")) t.Columns["Status"]!.ColumnName = "状态";
+                if (t.Columns.Contains("Priority")) t.Columns["Priority"]!.ColumnName = "优先级";
+                if (t.Columns.Contains("FaultDesc")) t.Columns["FaultDesc"]!.ColumnName = "故障描述";
+                if (t.Columns.Contains("MaterialReviewMode"))
+                {
+                    t.Columns["MaterialReviewMode"]!.ColumnName = "材料审阅";
+                    foreach (System.Data.DataRow row in t.Rows)
+                        row["材料审阅"] = MaterialReviewMode.ToChinese(row["材料审阅"] == DBNull.Value ? null : row["材料审阅"].ToString());
+                }
                 foreach (System.Data.DataRow row in t.Rows)
-                    row["材料审阅"] = MaterialReviewMode.ToChinese(row["材料审阅"] == DBNull.Value ? null : row["材料审阅"].ToString());
+                {
+                    row["状态"] = OrderStatusCode.ToChinese(row["状态"].ToString()!);
+                    row["优先级"] = PriorityCode.ToChinese(row["优先级"].ToString()!);
+                }
+                _grid.DataSource = t;
+                _lblEmpty.Visible = t.Rows.Count == 0;
+                _pager.Show(r);
             }
-            foreach (System.Data.DataRow row in t.Rows)
-            {
-                row["状态"] = OrderStatusCode.ToChinese(row["状态"].ToString()!);
-                row["优先级"] = PriorityCode.ToChinese(row["优先级"].ToString()!);
-            }
-            _grid.DataSource = t;
-            _pager.Show(r);
-        }
-        catch (Exception ex) { Ui.Error(DbHelper.FriendlyError(ex)); }
+            catch (Exception ex) { Ui.Error(DbHelper.FriendlyError(ex)); }
+        });
     }
 
     private int SelectedOrderId() =>
@@ -181,6 +191,7 @@ internal class FAssignDialog : UIForm
     public FAssignDialog(List<UserInfo> engineers)
     {
         Text = "派单 - 选择维修工程师";
+        Ui.CloseOnEsc(this);
         ClientSize = new Size(360, 120 + engineers.Count * 34);
         StartPosition = FormStartPosition.CenterParent;
         int y = 20;
@@ -231,6 +242,7 @@ internal class FReportDialog : UIForm
     {
         _user = user;
         Text = "新建报修工单";
+        Ui.CloseOnEsc(this);
         ClientSize = new Size(730, 330);
         StartPosition = FormStartPosition.CenterParent;
 
@@ -284,9 +296,9 @@ internal class FReportDialog : UIForm
             var prepared = await Task.Run(() => _svc.PreparePhoto(source));
             if (IsDisposed) return;
             _prepared = prepared;
-            _photo.Image?.Dispose();
-            _photo.Image = Image.FromFile(prepared.SavedPath);
-            _lblRecog.Text = prepared.Candidates.Count == 0
+        _photo.Image?.Dispose();
+        _photo.Image = Ui.LoadImageNoLock(prepared.SavedPath);
+        _lblRecog.Text = prepared.Candidates.Count == 0
                 ? "识别未匹配：需人工确认（可在工单详情中手动选择零件）"
                 : "拍照识别 Top3（匹配分数）：\n" + string.Join("\n",
                       prepared.Candidates.Select(r => $"{r.PartName} {r.Score}%{(r.Score < 60 ? "（需人工核对）" : "")}"));
@@ -354,12 +366,22 @@ internal class FOrderDetail : UIForm
         _user = user;
         _orderId = orderId;
         Text = $"工单详情 #{orderId}";
+        Ui.CloseOnEsc(this);
         ClientSize = new Size(716, 552);
         StartPosition = FormStartPosition.CenterParent;
 
         var close = Ui.Btn("关闭", 300, 520, 100, 30, (_, _) => Close());
         Controls.AddRange(new Control[] { _info, _photo, _lblReview, _reviewActions, _grid, close });
         Reload(orderId);
+    }
+
+    /// <summary>释放照片（连同底层 MemoryStream，R4 流式加载配套）。</summary>
+    private void DisposePhoto()
+    {
+        if (_photo.Image == null) return;
+        (_photo.Image.Tag as IDisposable)?.Dispose();
+        _photo.Image.Dispose();
+        _photo.Image = null;
     }
 
     private void Reload(int orderId)
@@ -375,8 +397,8 @@ internal class FOrderDetail : UIForm
             $"完工：{(o.FinishTime == null ? "-" : o.FinishTime.Value.ToString("MM-dd HH:mm"))}\n" +
             $"故障描述：{o.FaultDesc}\n识别结果：{o.Recognized ?? "-"}\n维修总结：{o.RepairSummary ?? "-"}";
 
-        _photo.Image?.Dispose();
-        _photo.Image = o.PhotoPath != null && File.Exists(o.PhotoPath) ? Image.FromFile(o.PhotoPath) : null;
+        DisposePhoto();
+        _photo.Image = Ui.LoadImageNoLock(o.PhotoPath);   // R4：字节流加载不锁文件
 
         _lblReview.Text = o.MaterialReviewMode == null
             ? "材料审阅：未审阅（生成领料单前需确认重点零件或选择仅整机BOM）"

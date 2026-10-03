@@ -187,7 +187,18 @@ public class FMain : UIForm
     private void TickClock() =>
         _lblClock.Text = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
             + " 星期" + "日一二三四五六"[(int)DateTime.Now.DayOfWeek]
-            + "  ·  会话空闲上限 30 分钟";
+            + "  ·  会话空闲上限 30 分钟  ·  F5 刷新当前页";
+
+    /// <summary>F5 刷新当前页（R4 交互）。</summary>
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (keyData == Keys.F5 && _content.Controls.Count > 0 && _content.Controls[0] is IRefreshable page)
+        {
+            Ui.Busy(page.RefreshData);
+            return true;
+        }
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
 
     private void ShowPage(string key)
     {

@@ -163,6 +163,7 @@ internal class FDeviceEdit : UIForm
     {
         _device = d;
         Text = d == null ? "新增设备" : "编辑设备";
+        Ui.CloseOnEsc(this);
         ClientSize = new Size(360, 230);
         StartPosition = FormStartPosition.CenterParent;
 

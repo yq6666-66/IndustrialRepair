@@ -23,6 +23,11 @@ internal class UcPicking : UserControl, IRefreshable
     private readonly UIDataGridView _grid = FillGrid();
     private readonly UIDataGridView _items = FillGrid();
     private readonly UiPager _pager = null!;
+    private readonly UILabel _lblEmptyMain = new()
+    {
+        Dock = DockStyle.Top, Height = 26, Text = "未查询到领料单", TextAlign = ContentAlignment.MiddleCenter,
+        ForeColor = Color.FromArgb(140, 150, 165), Font = new Font("微软雅黑", 9.5F), BackColor = Color.White, Visible = false
+    };
 
     private static UIDataGridView FillGrid()
     {
@@ -82,6 +87,7 @@ internal class UcPicking : UserControl, IRefreshable
 
         _pager = new UiPager((page, size) => LoadPage(page, size));
         Controls.Add(split);
+        Controls.Add(_lblEmptyMain);
         Controls.Add(_pager);
         Controls.Add(toolbar);
         Controls.Add(Ui.PageHeader("智能算料 · 领料", "整机 BOM × 冗余系数 · 事务出库 · Excel 导出"));
@@ -100,23 +106,27 @@ internal class UcPicking : UserControl, IRefreshable
     private int _currentPage = 1;
     private int _pageSize = 50;
 
-    /// <summary>分页加载领料单主表（R1：OFFSET-FETCH）。</summary>
+    /// <summary>分页加载领料单主表（R1：OFFSET-FETCH；R4：忙碌光标+空态）。</summary>
     private void LoadPage(int page, int size)
     {
-        try
+        Ui.Busy(() =>
         {
-            _currentPage = page; _pageSize = size;
-            var r = BLL.PagedQuery.Pickings(StatusOf(_cmbStatus), page, size);
-            var t = r.Items;
-            if (t.Columns.Contains("Status")) t.Columns["Status"]!.ColumnName = "状态";
-            foreach (System.Data.DataRow row in t.Rows)
-                row["状态"] = PickingStatusCode.ToChinese(row["状态"].ToString()!);
-            _grid.DataSource = t;
-            _pager.Show(r);
-            _lblSummary.Text = "";
-            LoadItems();
-        }
-        catch (Exception ex) { Ui.Error(DbHelper.FriendlyError(ex)); }
+            try
+            {
+                _currentPage = page; _pageSize = size;
+                var r = BLL.PagedQuery.Pickings(StatusOf(_cmbStatus), page, size);
+                var t = r.Items;
+                if (t.Columns.Contains("Status")) t.Columns["Status"]!.ColumnName = "状态";
+                foreach (System.Data.DataRow row in t.Rows)
+                    row["状态"] = PickingStatusCode.ToChinese(row["状态"].ToString()!);
+                _grid.DataSource = t;
+                _lblEmptyMain.Visible = t.Rows.Count == 0;
+                _pager.Show(r);
+                _lblSummary.Text = "";
+                LoadItems();
+            }
+            catch (Exception ex) { Ui.Error(DbHelper.FriendlyError(ex)); }
+        });
     }
 
     private int SelectedPickingId() =>
