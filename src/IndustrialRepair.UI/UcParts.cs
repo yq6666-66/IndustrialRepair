@@ -145,7 +145,7 @@ internal class UcParts : UserControl, IRefreshable
     /// <summary>刷新当前页（IRefreshable / 切页签入口）。</summary>
     public void RefreshData() => LoadParts(_currentPage, _pageSize);
 
-    /// <summary>分页加载配件列表（R1：OFFSET-FETCH；R4：忙碌光标+空态）。</summary>
+    /// <summary>分页加载配件列表（R1 分页；NR10 精确无命中自动模糊回退）。</summary>
     private void LoadParts(int page, int size)
     {
         Ui.Busy(() =>
@@ -157,10 +157,43 @@ internal class UcParts : UserControl, IRefreshable
                 int? cat = null;
                 if (_cmbCat.SelectedIndex > 0)
                     cat = _svc.Categories().FirstOrDefault(c => c.CategoryName == _cmbCat.Text)?.CategoryId;
-                var r = BLL.PagedQuery.Parts(_txtKey.Text.Trim(), cat, page, size);
-                var t = Translate(r.Items);
-                _grid.DataSource = t;
-                _lblEmpty.Visible = t.Rows.Count == 0;
+                var keyword = _txtKey.Text.Trim();
+                var r = BLL.PagedQuery.Parts(keyword, cat, page, size);
+
+                // NR10：精确零命中 → FuzzySharp 编辑距离回退
+                var fuzzyUsed = false;
+                if (r.Items.Rows.Count == 0 && !string.IsNullOrWhiteSpace(keyword) && cat == null)
+                {
+                    var ranked = PartSearchScorer.Rank(keyword, _svc.Search(null));
+                    if (ranked.Count > 0)
+                    {
+                        var codes = ranked.Select(x => x.Part.PartCode).ToList();
+                        var t = new System.Data.DataTable();
+                        t.Columns.Add("PartId", typeof(int));
+                        t.Columns.Add("PartCode", typeof(string));
+                        t.Columns.Add("PartName", typeof(string));
+                        t.Columns.Add("CategoryName", typeof(string));
+                        t.Columns.Add("Spec", typeof(string));
+                        t.Columns.Add("Unit", typeof(string));
+                        t.Columns.Add("Price", typeof(decimal));
+                        t.Columns.Add("StockQty", typeof(int));
+                        t.Columns.Add("MinStock", typeof(int));
+                        t.Columns.Add("Status", typeof(bool));
+                        foreach (var (_, p) in ranked)
+                            t.Rows.Add(p.PartId, p.PartCode, p.PartName, p.CategoryName, p.Spec, p.Unit, p.Price, p.StockQty, p.MinStock, p.Status);
+                        _grid.DataSource = Translate(t);
+                        _lblEmpty.Visible = false;
+                        _lblEmpty.Text = $"未精确命中，模糊搜索 \"{keyword}\" 返回 {ranked.Count} 条（编辑距离匹配）";
+                        _lblEmpty.Visible = false;   // 有模糊结果不显示空态
+                        // 模糊模式显示提示行（借 PageHeader 副标题太侵入，用 label 文本区）
+                        return;
+                    }
+                }
+
+                var dt = Translate(r.Items);
+                _grid.DataSource = dt;
+                _lblEmpty.Text = "未查询到配件（可调整关键字或类别）";
+                _lblEmpty.Visible = dt.Rows.Count == 0;
                 _pager.Show(r);
                 RenameColumns();
             }

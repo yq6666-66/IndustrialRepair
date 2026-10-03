@@ -37,15 +37,12 @@ var orderRepo = new WorkOrderRepository();
 var pickRepo = new PickingRepository();
 
 var rnd = new Random(20261003);   // 固定种子：可复现
-// NR9：Bogus 生成逼真故障描述（中文场景），固定种子与 Random 分离
-var faker = new Bogus.Bogus<string>(() =>
-{
-    var loc = new[] { "主轴", "液压站", "输送带", "电柜", "减速机", "冷却水", "气动", "导轨" }[rnd.Next(8)];
-    var sym = new[] { "异响，温度偏高", "压力波动，油缸渗油", "跑偏，托辊磨损", "接触器频繁跳闸",
-                      "渗油，密封老化", "温升异常，流量不足", "漏气，压力下降", "润滑不足，阻力增大" }[rnd.Next(8)];
-    var urgency = new[] { "需现场确认", "已通知工艺", "影响产量", "临时处理中", "" }[rnd.Next(5)];
-    return $"{loc}{sym}{(urgency.Length > 0 ? $"（{urgency}）" : "")}";
-}).UseSeed(20261003);
+// NR9：Bogus 随机化器生成逼真故障描述（固定种子可复现）
+var bogus = new Bogus.Randomizer(20261003);
+string NextFault() =>
+    $"{bogus.PickRandom(new[] { "主轴", "液压站", "输送带", "电柜", "减速机", "冷却水", "气动", "导轨" })}" +
+    $"{bogus.PickRandom(new[] { "异响，温度偏高", "压力波动，油缸渗油", "跑偏，托辊磨损", "接触器频繁跳闸", "渗油，密封老化", "温升异常，流量不足", "漏气，压力下降", "润滑不足，阻力增大" })}" +
+    $"（{bogus.PickRandom(new[] { "需现场确认", "已通知工艺", "影响产量", "临时处理中", "班中巡检发现" })}）";
 string[] types = { "机械", "电气", "液压", "其他" };
 
 int created = 0, reviewed = 0, picked = 0, issued = 0, done = 0;
@@ -56,7 +53,7 @@ for (int i = 0; i < orders; i++)
     // 时间回拨：CreatedAt 由触发器/默认值取当前——为跨月分布，直接 SQL 指定创建时间
     var day = DateTime.Now.AddDays(-rnd.Next(1, months * 30));
     var dev = devices[rnd.Next(devices.Count)];
-    var desc = $"{faker.Generate()}（批量 #{i + 1}）";
+    var desc = $"{NextFault()}（批量 #{i + 1}）";
 
     int orderId = int.Parse(orderRepo.Create(dev.DeviceId, reporter.UserId, desc,
         types[rnd.Next(types.Length)], PriorityCode.Normal, null, null));
