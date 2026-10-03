@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using IndustrialRepair.BLL;
 using IndustrialRepair.Models;
@@ -182,6 +183,68 @@ public class FMain : UIForm
         _sessionTimer.Start();
 
         Load += (_, _) => ShowPage("dashboard");
+
+        // ---- NR3 托盘与通知中心：MQ 自动报修/定时任务预警跨页面气泡提醒 ----
+        // 说明：H.NotifyIcon 2.x 已无 WinForms 目标（核心包为 WPF），故用 WinForms 内置 NotifyIcon
+        _tray = new NotifyIcon
+        {
+            Text = "工业维修智能化零件分配平台",
+            Icon = CreateAppIcon(),
+            Visible = true
+        };
+        _tray.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                WindowState = FormWindowState.Maximized;
+                Activate();
+            }
+        };
+        NotificationCenter.Raised += OnNotification;
+        FormClosed += (_, _) =>
+        {
+            NotificationCenter.Raised -= OnNotification;
+            _tray.Visible = false;
+            _tray.Icon?.Dispose();
+            _tray.Dispose();
+        };
+    }
+
+    private readonly NotifyIcon? _tray;
+
+    private void OnNotification(AppNotification n)
+    {
+        if (IsDisposed || _tray == null) return;
+        BeginInvoke(() => _tray.ShowBalloonTip(3000, n.Title, n.Body,
+            n.Level switch
+            {
+                NotificationLevel.Alert => ToolTipIcon.Error,
+                NotificationLevel.Warning => ToolTipIcon.Warning,
+                _ => ToolTipIcon.Info
+            }));
+    }
+
+    /// <summary>运行时绘制托盘图标（品牌蓝圆角 + 白色"修"字），无需外部资源。</summary>
+    private static Icon CreateAppIcon()
+    {
+        using var bmp = new Bitmap(32, 32);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using var brush = new SolidBrush(Color.FromArgb(41, 108, 202));
+            using var path = new GraphicsPath();
+            path.AddArc(0, 0, 12, 12, 180, 90);
+            path.AddArc(20, 0, 12, 12, 270, 90);
+            path.AddArc(20, 20, 12, 12, 0, 90);
+            path.AddArc(0, 20, 12, 12, 90, 90);
+            path.CloseFigure();
+            g.FillPath(brush, path);
+            using var font = new Font("微软雅黑", 14F, FontStyle.Bold);
+            var textSize = g.MeasureString("修", font);
+            using var textBrush = new SolidBrush(Color.White);
+            g.DrawString("修", font, textBrush, (32 - textSize.Width) / 2, (32 - textSize.Height) / 2 + 1);
+        }
+        return Icon.FromHandle(bmp.GetHicon());
     }
 
     private void TickClock() =>

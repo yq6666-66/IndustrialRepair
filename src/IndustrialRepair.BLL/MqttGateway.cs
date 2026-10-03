@@ -167,6 +167,8 @@ public class MqttGateway : IDisposable
                 null, "MQTT 遥测阈值触发（物联网设备集成）");
             FileLog.Write($"MQTT 自动报修：{orderNo} {desc}");
             AutoOrderCreated?.Invoke(orderNo, f);
+            NotificationCenter.Post(AppNotification.Alert("MQTT 自动报修",
+                $"{orderNo}：{f.DeviceName} 温度{f.Temp}℃ 振动{f.Vibration}mm/s 越限"));
         }
         catch (Exception ex)
         {
