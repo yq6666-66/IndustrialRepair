@@ -46,30 +46,36 @@ internal static class Ui
             RowHeadersVisible = false, EnableHeadersVisualStyles = false,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
             AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-            BackgroundColor = Color.White, BorderStyle = BorderStyle.None,
-            GridColor = Color.FromArgb(226, 232, 240),
+            BackgroundColor = Theme.Current.GridRow, BorderStyle = BorderStyle.None,
+            GridColor = Theme.Current.Border,
             CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
             ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
             ColumnHeadersHeight = 40,
             RowTemplate = { Height = 34 }
         };
-        // 深色表头 + 斑马纹 + 品牌蓝选中高亮（全系统表格统一样式）
-        g.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
-        g.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(32, 41, 56);
-        g.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
-        g.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(32, 41, 56);
-        g.ColumnHeadersDefaultCellStyle.Font = new Font("微软雅黑", 9.5F, FontStyle.Bold);
-        g.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
-        g.DefaultCellStyle.Font = new Font("微软雅黑", 9.5F);
-        g.DefaultCellStyle.ForeColor = Color.FromArgb(48, 56, 68);
-        g.DefaultCellStyle.SelectionBackColor = Color.FromArgb(41, 108, 202);
-        g.DefaultCellStyle.SelectionForeColor = Color.White;
-        g.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
-        g.DefaultCellStyle.WrapMode = DataGridViewTriState.False;
-        g.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(246, 249, 252);
-        g.AlternatingRowsDefaultCellStyle.SelectionBackColor = Color.FromArgb(41, 108, 202);
-        g.AlternatingRowsDefaultCellStyle.SelectionForeColor = Color.White;
+        ApplyGridTheme(g);
         return g;
+    }
+
+    /// <summary>按当前主题着色表格（OR1：暗/亮切换后调用刷新所有表格）。</summary>
+    public static void ApplyGridTheme(UIDataGridView g)
+    {
+        var t = Theme.Current;
+        g.BackgroundColor = t.GridRow;
+        g.GridColor = t.Border;
+        g.ColumnHeadersDefaultCellStyle.BackColor = t.GridHeader;
+        g.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
+        g.ColumnHeadersDefaultCellStyle.SelectionBackColor = t.GridHeader;
+        g.ColumnHeadersDefaultCellStyle.Font = new Font("微软雅黑", 9.5F, FontStyle.Bold);
+        g.DefaultCellStyle.Font = new Font("微软雅黑", 9.5F);
+        g.DefaultCellStyle.ForeColor = t.TextPrimary;
+        g.DefaultCellStyle.SelectionBackColor = t.GridSelection;
+        g.DefaultCellStyle.SelectionForeColor = Color.White;
+        g.DefaultCellStyle.BackColor = t.GridRow;
+        g.AlternatingRowsDefaultCellStyle.BackColor = t.GridAltRow;
+        g.AlternatingRowsDefaultCellStyle.SelectionBackColor = t.GridSelection;
+        g.AlternatingRowsDefaultCellStyle.SelectionForeColor = Color.White;
+        g.AlternatingRowsDefaultCellStyle.ForeColor = t.TextPrimary;
     }
 
     /// <summary>忙碌光标包装：数据库/导出等操作期间显示等待光标，异常也复位。</summary>

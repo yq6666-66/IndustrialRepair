@@ -26,6 +26,8 @@ public class FMain : UIForm
     private readonly UILabel _lblClock;
     private readonly System.Windows.Forms.Timer _sessionTimer = new();
     private readonly System.Windows.Forms.Timer _clockTimer = new();
+    private Panel? _header;
+    private UIButton? _btnTheme;
 
     private sealed record NavItem(string Key, string Text, string Perm);
     private sealed record NavGroup(string Title, NavItem[] Items);
@@ -40,7 +42,7 @@ public class FMain : UIForm
 
         // ---- 顶部标题栏：标题 + 当前模块 + 用户区（右侧自适应窗口宽度） ----
         // 用普通 Panel 而非 UIPanel：SunnyUI UILabel 在 UIPanel 上底色会发白（导航/状态栏所在普通 Panel 无此问题）
-        var header = new Panel { Dock = DockStyle.Top, Height = 64, BackColor = Color.FromArgb(41, 108, 202) };
+        var header = new Panel { Dock = DockStyle.Top, Height = 64, BackColor = Theme.Current.HeaderBar };
         var title = new UILabel
         {
             Text = "工业维修智能化零件分配平台", ForeColor = Color.White, BackColor = Color.Transparent,
@@ -61,6 +63,19 @@ public class FMain : UIForm
             Location = new Point(ClientSize.Width - 480, 20), Size = new Size(280, 24),
             AutoSize = false, TextAlign = ContentAlignment.MiddleRight
         };
+        var btnTheme = new UIButton
+        {
+            Text = Theme.IsDark ? "☀ 亮色" : "🌙 暗色", ForeColor = Color.White,
+            FillColor = Color.Transparent, RectColor = Color.FromArgb(160, 200, 245),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            Location = new Point(ClientSize.Width - 590, 16), Size = new Size(86, 32), Cursor = Cursors.Hand
+        };
+        btnTheme.Click += (_, _) =>
+        {
+            Theme.Toggle();
+            btnTheme.Text = Theme.IsDark ? "☀ 亮色" : "🌙 暗色";
+        };
+        _header = header; _btnTheme = btnTheme;
         var btnPwd = new UIButton
         {
             Text = "修改密码", ForeColor = Color.White, FillColor = Color.FromArgb(41, 108, 202),
@@ -81,7 +96,8 @@ public class FMain : UIForm
             RequestRelogin = true;
             Close();
         };
-        header.Controls.AddRange(new Control[] { title, _lblPage, _lblUser, btnPwd, btnLogout });
+        header.Controls.AddRange(new Control[] { title, _lblPage, _lblUser, btnTheme, btnPwd, btnLogout });
+        _header = header; _btnTheme = btnTheme;
 
         // ---- 左侧分组导航（按权限显隐） ----
         var nav = new Panel { Dock = DockStyle.Left, Width = 200, BackColor = Color.FromArgb(32, 41, 56) };
@@ -168,6 +184,19 @@ public class FMain : UIForm
         Controls.Add(nav);
         Controls.Add(header);
 
+        // OR1：主题切换广播 → 刷新框架颜色 + 遍历所有表格重着色
+        Theme.Changed += () => BeginInvoke(() =>
+        {
+            if (IsDisposed) return;
+            var t = Theme.Current;
+            if (_header != null) _header.BackColor = t.HeaderBar;
+            nav.BackColor = t.NavBg;
+            status.BackColor = t.PanelBg;
+            BackColor = t.PageBg;
+            foreach (Control page in _content.Controls)
+                ApplyThemeRecursive(page);
+        });
+
         // ---- 会话超时看门狗：每分钟心跳 ----
         _sessionTimer.Interval = 60_000;
         _sessionTimer.Tick += (_, _) =>
@@ -247,6 +276,27 @@ public class FMain : UIForm
             g.DrawString("修", font, textBrush, (32 - textSize.Width) / 2, (32 - textSize.Height) / 2 + 1);
         }
         return Icon.FromHandle(bmp.GetHicon());
+    }
+
+    /// <summary>递归重着色（OR1：主题切换时遍历所有子控件）。</summary>
+    private static void ApplyThemeRecursive(Control parent)
+    {
+        foreach (Control c in parent.Controls)
+        {
+            switch (c)
+            {
+                case UIDataGridView grid:
+                    Ui.ApplyGridTheme(grid);
+                    break;
+                case Panel p when p.BackColor != Color.Transparent:
+                    if (p.BackColor == ThemePalette.Light.PageBg || p.BackColor == ThemePalette.Dark.PageBg
+                        || p.BackColor == ThemePalette.Light.PanelBg || p.BackColor == ThemePalette.Dark.PanelBg
+                        || p.BackColor == ThemePalette.Light.NavBg || p.BackColor == ThemePalette.Dark.NavBg)
+                        p.BackColor = Theme.Current.PanelBg;
+                    break;
+            }
+            if (c.Controls.Count > 0) ApplyThemeRecursive(c);
+        }
     }
 
     private void TickClock() =>
