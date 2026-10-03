@@ -7,7 +7,7 @@ using IndustrialRepair.Models;
 namespace IndustrialRepair.DAL;
 
 /// <summary>智能算料 / 领料</summary>
-public class PickingRepository
+public class PickingRepository : IPickingRepository
 {
     /// <summary>智能算料生成领料单（usp_GeneratePicking：BOM×冗余，事务+回滚）</summary>
     public int Generate(int orderId, string operatorName, decimal redundancy)

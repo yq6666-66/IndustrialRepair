@@ -11,8 +11,15 @@ namespace IndustrialRepair.BLL;
 /// <summary>智能算料与领料：BOM×冗余系数生成清单、出库、CSV 导出</summary>
 public class PickingService
 {
-    private readonly PickingRepository _repo = new();
-    private readonly DAL.WorkOrderRepository _orders = new();
+    private readonly IPickingRepository _repo;
+    private readonly IWorkOrderRepository _orders;
+
+    /// <summary>默认构造（生产）。仓储可注入替代（R2 可测试性）。</summary>
+    public PickingService(IPickingRepository? repo = null, IWorkOrderRepository? orders = null)
+    {
+        _repo = repo ?? new PickingRepository();
+        _orders = orders ?? new WorkOrderRepository();
+    }
 
     /// <summary>智能算料：根据工单设备 BOM×冗余系数自动生成领料清单（需登录 + picking.generate）</summary>
     public Result<int> Generate(int orderId, string operatorName, decimal redundancy)

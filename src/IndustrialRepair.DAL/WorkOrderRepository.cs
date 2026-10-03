@@ -7,7 +7,7 @@ using IndustrialRepair.Models;
 namespace IndustrialRepair.DAL;
 
 /// <summary>工单（存储过程流转 + 视图查询）</summary>
-public class WorkOrderRepository
+public class WorkOrderRepository : IWorkOrderRepository
 {
     /// <summary>创建报修工单（usp_CreateOrder），返回新工单号；recognizedJson 为结构化识别候选</summary>
     public string Create(int deviceId, int reporterId, string faultDesc, string? faultType,

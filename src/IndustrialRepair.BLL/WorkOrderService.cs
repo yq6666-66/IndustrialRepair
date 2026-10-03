@@ -12,9 +12,17 @@ namespace IndustrialRepair.BLL;
 /// <summary>工单业务：报修（拍照压缩+识别）、派单、接单、完工、取消、报表</summary>
 public class WorkOrderService
 {
-    private readonly WorkOrderRepository _orders = new();
-    private readonly BasicRepository _basic = new();
-    private readonly IImageRecognizer _recognizer = new RecognitionEngine();
+    private readonly IWorkOrderRepository _orders;
+    private readonly BasicRepository _basic;
+    private readonly IImageRecognizer _recognizer;
+
+    /// <summary>默认构造（生产）。仓储/识别器可注入替代（R2 可测试性）。</summary>
+    public WorkOrderService(IWorkOrderRepository? orders = null, IImageRecognizer? recognizer = null)
+    {
+        _orders = orders ?? new WorkOrderRepository();
+        _basic = new BasicRepository();
+        _recognizer = recognizer ?? new RecognitionEngine();
+    }
 
     /// <summary>照片保存目录（本地压缩后上传的落盘位置）</summary>
     public static string PhotoDir =>
