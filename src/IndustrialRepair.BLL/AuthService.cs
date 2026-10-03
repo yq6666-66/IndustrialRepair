@@ -119,11 +119,10 @@ public class AuthService
     /// <summary>注册（默认“报修人”角色；用户+日志在同一 C# 事务中写入）</summary>
     public Result Register(string userName, string password, string realName, string? phone, string? email)
     {
-        if (string.IsNullOrWhiteSpace(userName) || userName.Length < 3)
-            return Result.Fail("用户名至少 3 个字符。");
-        var policy = PasswordPolicy.Check(password);
-        if (!policy.Success) return policy;
-        if (string.IsNullOrWhiteSpace(realName)) return Result.Fail("请填写真实姓名。");
+        // NR6：FluentValidation 集中校验（含口令策略/手机号/邮箱格式，UI 与服务共用）
+        var invalid = new RegisterInputValidator().FirstError(
+            new RegisterInput { UserName = userName, Password = password, RealName = realName, Phone = phone, Email = email });
+        if (invalid != null) return Result.Fail(invalid);
         if (_users.GetByUserName(userName) != null) return Result.Fail("用户名已存在。");
 
         var roles = _users.ListRoles();

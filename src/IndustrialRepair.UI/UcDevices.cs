@@ -186,8 +186,12 @@ internal class FDeviceEdit : UIForm
 
     private void OnSave(object? s, EventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(_code.Text)) { Ui.Error("请填写设备编码。"); return; }
-        if (string.IsNullOrWhiteSpace(_name.Text)) { Ui.Error("请填写设备名称。"); return; }
+        var invalid = new DeviceInputValidator().FirstError(new DeviceInput
+        {
+            DeviceCode = _code.Text.Trim(), DeviceName = _name.Text.Trim(),
+            Location = _loc.Text, Status = _status.Checked
+        });
+        if (invalid != null) { Ui.Error(invalid); return; }
         try
         {
             new BasicRepository().SaveDevice(new Device

@@ -342,6 +342,16 @@ internal class FPartEdit : UIForm
         decimal.TryParse(_price.Text, out var price);
         int.TryParse(_stock.Text, out var stock);
         int.TryParse(_min.Text, out var min);
+
+        // NR6：FluentValidation 集中校验（与服务层同一套规则）
+        var invalid = new PartInputValidator().FirstError(new PartInput
+        {
+            PartCode = _code.Text.Trim(), PartName = _name.Text.Trim(), CategoryName = _cat.Text,
+            Spec = _spec.Text, Unit = string.IsNullOrWhiteSpace(_unit.Text) ? "个" : _unit.Text.Trim(),
+            Price = price, StockQty = stock, MinStock = min
+        });
+        if (invalid != null) { Ui.Error(invalid); return; }
+
         var cat = _cats.FirstOrDefault(c => c.CategoryName == _cat.Text);
         if (cat == null) { Ui.Error("请选择类别。"); return; }
 
