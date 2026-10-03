@@ -40,28 +40,35 @@ public class RecognitionEngine : IImageRecognizer
         get
         {
             if (_library != null) return _library;
-            _library = new List<PartFeature>();
-            foreach (var p in _parts.Search(null))
-            {
-                if (string.IsNullOrWhiteSpace(p.FeatureJson)) continue;
-                try
-                {
-                    using var doc = JsonDocument.Parse(p.FeatureJson);
-                    var root = doc.RootElement;
-                    var f = new PartFeature { PartId = p.PartId, Code = p.PartCode, Name = p.PartName };
-                    if (root.TryGetProperty("color", out var color) && color.ValueKind == JsonValueKind.Array)
-                    {
-                        var arr = color.EnumerateArray().ToArray();
-                        f.R = arr[0].GetInt32(); f.G = arr[1].GetInt32(); f.B = arr[2].GetInt32();
-                    }
-                    if (root.TryGetProperty("shape", out var shape)) f.Shape = shape.GetString() ?? "";
-                    if (root.TryGetProperty("size", out var size)) f.Size = size.GetString() ?? "";
-                    _library.Add(f);
-                }
-                catch { /* 特征格式异常的配件跳过 */ }
-            }
+            // NR9：跨实例共享特征库缓存（30s TTL，配件编辑时 Remove 失效）
+            _library = AppCache.GetOrSet("recognition:featureLibrary", () => BuildLibrary());
             return _library;
         }
+    }
+
+    private List<PartFeature> BuildLibrary()
+    {
+        var lib = new List<PartFeature>();
+        foreach (var p in _parts.Search(null))
+        {
+            if (string.IsNullOrWhiteSpace(p.FeatureJson)) continue;
+            try
+            {
+                using var doc = JsonDocument.Parse(p.FeatureJson);
+                var root = doc.RootElement;
+                var f = new PartFeature { PartId = p.PartId, Code = p.PartCode, Name = p.PartName };
+                if (root.TryGetProperty("color", out var color) && color.ValueKind == JsonValueKind.Array)
+                {
+                    var arr = color.EnumerateArray().ToArray();
+                    f.R = arr[0].GetInt32(); f.G = arr[1].GetInt32(); f.B = arr[2].GetInt32();
+                }
+                if (root.TryGetProperty("shape", out var shape)) f.Shape = shape.GetString() ?? "";
+                if (root.TryGetProperty("size", out var size)) f.Size = size.GetString() ?? "";
+                lib.Add(f);
+            }
+            catch { /* 特征格式异常的配件跳过 */ }
+        }
+        return lib;
     }
 
     /// <summary>接口实现入口：生产识别（含二维码直达路径）。</summary>
