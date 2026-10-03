@@ -78,17 +78,18 @@ internal class UcParts : UserControl, IRefreshable
                 if (_grid.DataSource is not System.Data.DataTable t || t.Rows.Count == 0)
                 { Ui.Error("当前无数据可导出。"); return; }
                 var view = t.Copy();
-                view.Columns.Remove("PartId");                    // 内部列不进 PDF
+                view.Columns.Remove("PartId");
                 Ui.Info("已导出：" + BLL.PdfService.ExportTablePdf("配件库存清单", view, qrText: "PART-INVENTORY"));
             }
             catch (Exception ex) { Ui.Error("PDF 导出失败：" + ex.Message); }
         });
+        var btnImport = Ui.Btn("批量导入", 610, 46, 90, 32, OnBatchImport);
 
         var toolbar = new Panel { Dock = DockStyle.Top, Height = 84 };
         toolbar.Controls.AddRange(new Control[]
         {
             Ui.Lbl("关键字：", 4, 14, 80), _txtKey, Ui.Lbl("类别：", 346, 14, 48), _cmbCat,
-            btnQuery, btnAdd, btnEdit, btnDel, btnIn, btnLow, btnLog, btnQr, btnXls, btnPdf
+            btnQuery, btnAdd, btnEdit, btnDel, btnIn, btnLow, btnLog, btnQr, btnXls, btnPdf, btnImport
         });
 
         // Dock 布局（同 FMain 模式）：填充控件先加，标题条最后加；分页条在工具栏之下
@@ -281,6 +282,36 @@ internal class UcParts : UserControl, IRefreshable
     {
         using var dlg = new FPartEdit(p, _svc.Categories());
         if (dlg.ShowDialog() == DialogResult.OK) RefreshData();
+    }
+
+    /// <summary>批量导入（OR3）：Excel 上传 → FluentValidation 逐行校验 → 预览 → 确认写入。</summary>
+    private void OnBatchImport(object? s, EventArgs e)
+    {
+        using var ofd = new OpenFileDialog
+        { Filter = "Excel 文件|*.xlsx", Title = "选择配件批量导入文件（.xlsx）" };
+        if (ofd.ShowDialog() != DialogResult.OK) return;
+
+        try
+        {
+            Ui.Busy(() =>
+            {
+                var svc = new PartImportService();
+                var results = svc.Validate(ofd.FileName);
+                var ok = results.Count(r => r.Success);
+                var fail = results.Count(r => !r.Success);
+                var errors = results.Where(r => !r.Success)
+                    .Take(10)
+                    .Select(r => $"行{r.RowNumber}: {r.PartCode} — {r.Error}");
+                var detail = fail > 0 ? $"\n\n错误（前 10 条）：\n{string.Join("\n", errors)}{(fail > 10 ? $"\n... 共 {fail} 条错误" : "")}" : "";
+
+                if (!Ui.Ask($"校验结果：{ok} 行通过 / {fail} 行失败{detail}\n\n确定导入 {ok} 条通过数据？（失败行跳过）"))
+                    return;
+                var (imported, skipped) = svc.Import(ofd.FileName);
+                Ui.Info($"导入完成：成功 {imported} 条 / 跳过 {skipped} 条。");
+                LoadParts(1, _pageSize);
+            });
+        }
+        catch (Exception ex) { Ui.Error("导入失败：" + ex.Message); }
     }
 }
 
