@@ -1,0 +1,23 @@
+﻿{
+  "mode": "qr",
+  "startedAt": "2026-10-03T20:06:16.8078252+08:00",
+  "title": "扫码回环评测（非外观指标）",
+  "imageCount": 6,
+  "positiveCount": 6,
+  "negativeCount": 0,
+  "engine": "RecognitionEngineV2(ZXing+OpenCV)",
+  "preProcess": {
+    "maxEdge": 800,
+    "jpegQuality": 75
+  },
+  "openCvDegradedImages": 0,
+  "featureLibHash": "55B22DA7D7D5E205BF6342B35CB8E387",
+  "stats": {
+    "Positives": 6,
+    "Top1Correct": 6,
+    "Top3Hit": 6,
+    "Unmatched": 0,
+    "Negatives": 0,
+    "NegAccepted": 0
+  }
+}

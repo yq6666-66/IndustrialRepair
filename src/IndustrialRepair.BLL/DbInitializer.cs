@@ -75,6 +75,8 @@ public class DbInitializer
         // 2) 目标库内：建版本表 → 应用待迁移版本 → 视哈希刷新过程 → 结构校验；同一事务
         using var conn = new SqlConnection(Db.ConnectionString);
         OpenWithRetry(conn);
+        // 含过滤索引/计算列表对象的 DML 与 CREATE OR ALTER 均要求本会话选项（与 02 文件头双保险）
+        using (var qi = new SqlCommand("SET QUOTED_IDENTIFIER ON", conn)) qi.ExecuteNonQuery();
         using var tran = conn.BeginTransaction();
         try
         {

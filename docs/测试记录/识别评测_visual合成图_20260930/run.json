@@ -1,0 +1,23 @@
+﻿{
+  "mode": "visual",
+  "startedAt": "2026-10-03T20:06:51.0528839+08:00",
+  "title": "外观分类评测（禁用照片内条码作答）",
+  "imageCount": 4,
+  "positiveCount": 3,
+  "negativeCount": 1,
+  "engine": "RecognitionEngineV2(ZXing+OpenCV)",
+  "preProcess": {
+    "maxEdge": 800,
+    "jpegQuality": 75
+  },
+  "openCvDegradedImages": 0,
+  "featureLibHash": "55B22DA7D7D5E205BF6342B35CB8E387",
+  "stats": {
+    "Positives": 3,
+    "Top1Correct": 0,
+    "Top3Hit": 1,
+    "Unmatched": 0,
+    "Negatives": 1,
+    "NegAccepted": 1
+  }
+}

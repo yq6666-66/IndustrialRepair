@@ -11,6 +11,7 @@
     - 唯一过滤索引 UQ_picking_pending_per_order 兜底（04 迁移创建）
 ==============================================================*/
 SET NOCOUNT ON;
+SET QUOTED_IDENTIFIER ON;   -- 含过滤索引/计算列表的对象 DML 及过程/触发器创建的会话要求
 USE IndustrialRepairDb;
 GO
 

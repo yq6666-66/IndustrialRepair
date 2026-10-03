@@ -1,0 +1,7 @@
+﻿image,expected,top1,source,score,top3,unmatched,elapsed_ms
+P-CD-001.png,P-CD-001,P-CD-001,Barcode,100,P-CD-001,0,83.6
+P-CD-002.png,P-CD-002,P-CD-002,Barcode,100,P-CD-002,0,9.3
+P-CD-003.png,P-CD-003,P-CD-003,Barcode,100,P-CD-003,0,6.8
+P-DQ-001.png,P-DQ-001,P-DQ-001,Barcode,100,P-DQ-001,0,5.8
+P-DQ-002.png,P-DQ-002,P-DQ-002,Barcode,100,P-DQ-002,0,6.3
+P-DQ-003.png,P-DQ-003,P-DQ-003,Barcode,100,P-DQ-003,0,6.7
