@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;   // R27：ListSortDirection
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -17,8 +18,12 @@ internal static class Ui
             Font = new Font("微软雅黑", 9.5F), Cursor = Cursors.Hand
         };
         if (onClick != null) b.Click += onClick;
+        // R26：自动挂 ToolTip（按钮文字即提示）
+        _tip.SetToolTip(b, text);
         return b;
     }
+
+    private static readonly ToolTip _tip = new() { AutoPopDelay = 3000, InitialDelay = 400 };
 
     public static UITextBox Txt(string watermark, int x, int y, int w = 200, bool password = false)
     {
@@ -52,6 +57,13 @@ internal static class Ui
             ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
             ColumnHeadersHeight = 40,
             RowTemplate = { Height = 34 }
+        };
+        // R27：列头点击排序（DataGridView 默认 DataTable 排序，显式启用）
+        g.ColumnHeaderMouseClick += (_, e) =>
+        {
+            if (e.ColumnIndex < 0) return;
+            var col = g.Columns[e.ColumnIndex];
+            g.Sort(col, g.SortOrder == SortOrder.Ascending ? ListSortDirection.Descending : ListSortDirection.Ascending);
         };
         ApplyGridTheme(g);
         return g;

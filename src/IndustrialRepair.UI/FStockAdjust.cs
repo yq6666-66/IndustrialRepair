@@ -113,9 +113,14 @@ internal class FStockAdjust : UIForm
                 }
                 else
                 {
-                    DbHelper.ExecuteNonQuery(
-                        "UPDATE dbo.part SET StockQty = StockQty + @D WHERE PartId = @Id AND StockQty + @D >= 0",
-                        CommandType.Text, DbHelper.P("@D", diff), DbHelper.P("@Id", partId));
+                    // R25 修复：负差异调减也写流水（与 usp_StockIn 对称）
+                    const string sql = @"
+UPDATE dbo.part SET StockQty = StockQty + @D WHERE PartId = @Id AND StockQty + @D >= 0;
+IF @@ROWCOUNT > 0
+    INSERT INTO dbo.part_stock_log(PartId, ChangeQty, AfterQty, RefNo)
+    SELECT PartId, @D, StockQty, @R FROM dbo.part WHERE PartId = @Id;";
+                    DbHelper.ExecuteNonQuery(sql, CommandType.Text,
+                        DbHelper.P("@D", diff), DbHelper.P("@Id", partId), DbHelper.P("@R", refNo));
                 }
                 ok++;
             }

@@ -233,4 +233,24 @@ public class WorkOrderService
     public WorkOrder? Get(int orderId) => _orders.GetById(orderId);
     public List<WorkOrderRecord> Records(int orderId) => _orders.GetRecords(orderId);
     public DataTable ReportSheet() => _orders.Report();
+
+    /// <summary>添加工单备注（R23：自由文本写入 work_order_record，Action='Note'）。</summary>
+    public Result AddNote(int orderId, string content)
+    {
+        var guard = Guard.Session("order.view");   // 有查看权限即可添加备注
+        if (!guard.Success) return guard;
+        var actor = AppSession.Current!;
+        if (string.IsNullOrWhiteSpace(content)) return Result.Fail("备注内容不能为空。");
+        try
+        {
+            DbHelper.ExecProc("dbo.usp_AddNote", new Dictionary<string, object?>
+            {
+                ["@OrderId"] = orderId, ["@UserId"] = actor.UserId,
+                ["@UserName"] = actor.UserName, ["@Content"] = content.Trim()
+            }, null, out _);
+            return Result.Ok("备注已添加。");
+        }
+        catch (SqlException ex) { return Result.Fail(DbHelper.FriendlyError(ex)); }
+        catch (Exception ex) { return Result.Fail(ex.Message); }
+    }
 }

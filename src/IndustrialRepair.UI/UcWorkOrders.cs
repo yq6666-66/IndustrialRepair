@@ -399,7 +399,11 @@ internal class FOrderDetail : UIForm
         Location = new Point(496, 14), Size = new Size(196, 140), SizeMode = PictureBoxSizeMode.Zoom,
         BackColor = Color.FromArgb(240, 240, 240), BorderStyle = BorderStyle.FixedSingle
     };
-    private readonly UIDataGridView _grid = Ui.Grid(16, 400, 680, 170);   // OR7：下移给时间线留位
+    private readonly UIDataGridView _grid = Ui.Grid(16, 440, 680, 130);   // OR7 下移+R23 备注区压缩
+    private readonly UITextBox _txtNote = new()
+    {
+        Location = new Point(16, 400), Size = new Size(540, 30), Watermark = "添加备注…（回车提交）"
+    };
 
     /// <summary>工单详情：信息/照片/识别候选/材料审阅/流转时间线/流转记录（工程师可在此人工确认零件）</summary>
     public FOrderDetail(int orderId, UserInfo user)
@@ -412,7 +416,10 @@ internal class FOrderDetail : UIForm
         StartPosition = FormStartPosition.CenterParent;
 
         var close = Ui.Btn("关闭", 300, 588, 100, 30, (_, _) => Close());
-        Controls.AddRange(new Control[] { _info, _photo, _lblReview, _reviewActions, _timeline, _grid, close });
+        // R23：备注输入 + 添加按钮
+        var btnNote = Ui.Btn("添加", 570, 399, 70, 32, (_, _) => SubmitNote());
+        Ui.BindEnter(_txtNote, SubmitNote);
+        Controls.AddRange(new Control[] { _info, _photo, _lblReview, _reviewActions, _timeline, _txtNote, btnNote, _grid, close });
         Reload(orderId);
     }
 
@@ -497,6 +504,15 @@ internal class FOrderDetail : UIForm
 
     /// <summary>当前所处阶段索引（最后一个记录即当前；已取消取到取消）。</summary>
     private static int CurrentStageIndex(List<WorkOrderRecord> stages) => stages.Count - 1;
+
+    /// <summary>提交备注（R23）。</summary>
+    private void SubmitNote()
+    {
+        if (string.IsNullOrWhiteSpace(_txtNote.Text)) return;
+        var r = _svc.AddNote(_orderId, _txtNote.Text);
+        if (r.Success) { _txtNote.Text = ""; Reload(_orderId); }
+        else Ui.Error(r.Message);
+    }
 
     /// <summary>释放照片（连同底层 MemoryStream，R4 流式加载配套）。</summary>
     private void DisposePhoto()

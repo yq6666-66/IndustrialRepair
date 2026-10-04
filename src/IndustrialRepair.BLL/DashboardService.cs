@@ -53,4 +53,19 @@ public class DashboardService
     /// <summary>高成本工单 TopN（R3：报表页下半榜）</summary>
     public System.Data.DataTable OrderCostTop(int top = 10) =>
         DbHelper.GetTable($"SELECT TOP ({Math.Clamp(top, 1, 50)}) OrderNo, DeviceName, EngineerName, Status, MaterialCost FROM dbo.vw_OrderCost WHERE MaterialCost > 0 ORDER BY MaterialCost DESC");
+
+    /// <summary>配件消耗分析（R21：TOP N 按用量/成本，三窗口）。</summary>
+    public System.Data.DataTable ConsumptionAnalysis(int top = 10, string orderBy = "TotalQty") =>
+        DbHelper.GetTable(
+            $@"SELECT TOP ({Math.Clamp(top, 1, 50)}) PartCode, PartName, Spec, Unit,
+                      TotalQty, TotalCost, Qty30d, Cost30d, Qty90d, Cost90d, StockQty, MinStock
+              FROM dbo.vw_ConsumptionAnalysis
+              ORDER BY {Math.Clamp(orderBy == "TotalCost" ? 1 : 0, 0, 1) switch { 1 => "TotalCost", _ => "TotalQty" }} DESC");
+
+    /// <summary>按设备汇总成本（R24：成本中心报表）。</summary>
+    public System.Data.DataTable DeviceCostReport() =>
+        DbHelper.GetTable(
+            @"SELECT DeviceCode, DeviceName, Location, OrderCount, TotalCost, AvgMinutes
+              FROM dbo.vw_DeviceCost
+              ORDER BY TotalCost DESC");
 }

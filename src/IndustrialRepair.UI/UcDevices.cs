@@ -70,6 +70,13 @@ internal class UcDevices : UserControl, IRefreshable
         Controls.Add(Ui.PageHeader("设备与BOM", "设备台账 · BOM 用量维护（算料数据基础）"));
 
         _gridDev.SelectionChanged += (_, _) => LoadBom();
+        Ui.BindRowDblClick(_gridDev, _ =>   // R22：双击查看维护历史
+        {
+            var d = SelectedDevice();
+            if (d == null) return;
+            using var dlg = new FDeviceHistory(d);
+            dlg.ShowDialog();
+        });
     }
 
     private Device? SelectedDevice() =>
@@ -216,7 +223,10 @@ internal class UcReport : UserControl, IRefreshable
     private readonly DashboardService _dash = new();
     private readonly UIDataGridView _grid = FillGrid2();
     private readonly UIDataGridView _gridCost = FillGrid2();
+    private readonly UIDataGridView _gridConsumption = FillGrid2();
+    private readonly UIDataGridView _gridDeviceCost = FillGrid2();
     private readonly UIComboBox _cmbRange = Ui.Combo(360, 8, 130);
+    private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
 
     private static UIDataGridView FillGrid2()
     {
@@ -232,8 +242,9 @@ internal class UcReport : UserControl, IRefreshable
         {
             try
             {
-                if (_grid.DataSource is not System.Data.DataTable t || t.Rows.Count == 0) { Ui.Error("无数据可导出。"); return; }
-                Ui.Info("已导出：" + ExcelService.ExportTable(t, "维修报表", "月度报表", totalRow: true));
+                var grid = _tabs.SelectedTab?.Controls.OfType<UIDataGridView>().FirstOrDefault();
+                if (grid?.DataSource is not System.Data.DataTable t || t.Rows.Count == 0) { Ui.Error("无数据可导出。"); return; }
+                Ui.Info("已导出：" + ExcelService.ExportTable(t, $"维修报表_{_tabs.SelectedTab?.Text}", _tabs.SelectedTab?.Text ?? "Sheet1", totalRow: true));
             }
             catch (Exception ex) { Ui.Error(ex.Message); }
         });
@@ -246,31 +257,29 @@ internal class UcReport : UserControl, IRefreshable
         var toolbar = new Panel { Dock = DockStyle.Top, Height = 46 };
         var lbl = new UILabel
         {
-            Text = "按月统计：工单量 · 完成数 · 取消数 · 平均处理分钟 · 材料成本", AutoSize = true,
+            Text = "多维度维修报表", AutoSize = true,
             Location = new Point(10, 12), Font = new Font("微软雅黑", 9F), ForeColor = Color.FromArgb(90, 100, 115)
         };
         var lblRange = new UILabel { Text = "范围：", AutoSize = true, Location = new Point(310, 13), Font = new Font("微软雅黑", 9F) };
         toolbar.Controls.AddRange(new Control[] { lbl, lblRange, _cmbRange, btn, btnXls });
 
-        var topHalf = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 26, 0, 4) };
-        var head1 = new UILabel
-        { Text = "月度统计（vw_RepairReport）", Dock = DockStyle.Top, Height = 24, Font = new Font("微软雅黑", 9.5F, FontStyle.Bold) };
-        topHalf.Controls.Add(_grid);
-        topHalf.Controls.Add(head1);
+        // R21/R24：TabControl 四页签
+        var tabMonthly = new TabPage("月度统计") ;
+        tabMonthly.Controls.Add(_grid);
+        var tabCost = new TabPage("高成本工单");
+        tabCost.Controls.Add(_gridCost);
+        var tabConsumption = new TabPage("消耗分析");
+        tabConsumption.Controls.Add(_gridConsumption);
+        var tabDevice = new TabPage("设备成本");
+        tabDevice.Controls.Add(_gridDeviceCost);
+        _tabs.TabPages.Add(tabMonthly);
+        _tabs.TabPages.Add(tabCost);
+        _tabs.TabPages.Add(tabConsumption);
+        _tabs.TabPages.Add(tabDevice);
 
-        var bottomHalf = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 26, 0, 0) };
-        var head2 = new UILabel
-        { Text = "高成本工单 Top10（材料成本，vw_OrderCost）", Dock = DockStyle.Top, Height = 24, Font = new Font("微软雅黑", 9.5F, FontStyle.Bold) };
-        bottomHalf.Controls.Add(_gridCost);
-        bottomHalf.Controls.Add(head2);
-
-        var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 300 };
-        split.Panel1.Controls.Add(topHalf);
-        split.Panel2.Controls.Add(bottomHalf);
-
-        Controls.Add(split);
+        Controls.Add(_tabs);
         Controls.Add(toolbar);
-        Controls.Add(Ui.PageHeader("维修报表", "月度统计 · 时间范围筛选 · 高成本工单榜"));
+        Controls.Add(Ui.PageHeader("维修报表", "月度/成本/消耗/设备 · 多维度分析 · 可导出 Excel"));
     }
 
     public void RefreshData()
@@ -278,7 +287,6 @@ internal class UcReport : UserControl, IRefreshable
         try
         {
             var t = _svc.ReportSheet();
-            // 时间范围过滤（R3）：月份列形如 2026-09
             string? floor = _cmbRange.SelectedIndex switch
             {
                 1 => DateTime.Now.AddMonths(-5).ToString("yyyy-MM"),
@@ -298,6 +306,12 @@ internal class UcReport : UserControl, IRefreshable
             foreach (System.Data.DataRow r in cost.Rows)
                 r["状态"] = OrderStatusCode.ToChinese(r["状态"].ToString()!);
             _gridCost.DataSource = cost;
+
+            // R21：消耗分析（TOP10 按用量）
+            _gridConsumption.DataSource = _dash.ConsumptionAnalysis(10, "TotalQty");
+
+            // R24：设备成本汇总
+            _gridDeviceCost.DataSource = _dash.DeviceCostReport();
         }
         catch (Exception ex) { Ui.Error(DbHelper.FriendlyError(ex)); }
     }

@@ -649,3 +649,56 @@ JOIN dbo.work_order o ON o.OrderId = pl.OrderId
 JOIN dbo.device d ON d.DeviceId = o.DeviceId
 LEFT JOIN dbo.picking_item i ON i.PickingId = pl.PickingId;
 GO
+
+-- R21：配件消耗分析（全部/近30天/近90天 三窗口）
+CREATE OR ALTER VIEW dbo.vw_ConsumptionAnalysis
+AS
+WITH consumed AS (
+    SELECT i.PartId, i.PartCode, i.PartName,
+           SUM(i.Qty) AS TotalQty,
+           SUM(i.Qty * i.UnitPrice) AS TotalCost,
+           SUM(CASE WHEN pl.IssuedAt >= DATEADD(DAY, -30, GETDATE()) THEN i.Qty ELSE 0 END) AS Qty30d,
+           SUM(CASE WHEN pl.IssuedAt >= DATEADD(DAY, -30, GETDATE()) THEN i.Qty * i.UnitPrice ELSE 0 END) AS Cost30d,
+           SUM(CASE WHEN pl.IssuedAt >= DATEADD(DAY, -90, GETDATE()) THEN i.Qty ELSE 0 END) AS Qty90d,
+           SUM(CASE WHEN pl.IssuedAt >= DATEADD(DAY, -90, GETDATE()) THEN i.Qty * i.UnitPrice ELSE 0 END) AS Cost90d
+    FROM dbo.picking_item i
+    JOIN dbo.picking_list pl ON pl.PickingId = i.PickingId AND pl.Status = N'Issued'
+    GROUP BY i.PartId, i.PartCode, i.PartName
+)
+SELECT c.*, p.Spec, p.Unit, p.StockQty, p.MinStock
+FROM consumed c JOIN dbo.part p ON p.PartId = c.PartId;
+GO
+
+-- R24：按设备汇总成本（成本中心）
+CREATE OR ALTER VIEW dbo.vw_DeviceCost
+AS
+SELECT d.DeviceId, d.DeviceCode, d.DeviceName, d.Location,
+       COUNT(DISTINCT o.OrderId) AS OrderCount,
+       ISNULL(SUM(c.MaterialCost), 0) AS TotalCost,
+       AVG(CASE WHEN o.Status = N'Done' THEN
+           CAST(DATEDIFF(MINUTE, o.CreatedAt, o.FinishTime) AS DECIMAL(10,1)) END) AS AvgMinutes
+FROM dbo.device d
+LEFT JOIN dbo.work_order o ON o.DeviceId = d.DeviceId
+OUTER APPLY (SELECT ISNULL(SUM(i.Qty * i.UnitPrice), 0) AS MaterialCost
+             FROM dbo.picking_list pl JOIN dbo.picking_item i ON i.PickingId = pl.PickingId
+             WHERE pl.OrderId = o.OrderId) c
+GROUP BY d.DeviceId, d.DeviceCode, d.DeviceName, d.Location;
+GO
+
+-- R23：工单备注
+CREATE OR ALTER PROCEDURE dbo.usp_AddNote
+    @OrderId    INT,
+    @UserId     INT,
+    @UserName   NVARCHAR(30),
+    @Content    NVARCHAR(300)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF NOT EXISTS(SELECT 1 FROM dbo.work_order WHERE OrderId = @OrderId)
+        RAISERROR(N'工单不存在。', 16, 1);
+    IF ISNULL(@Content, N'') = N''
+        RAISERROR(N'备注内容不能为空。', 16, 1);
+    INSERT INTO dbo.work_order_record(OrderId, Action, OperatorId, Operator, Note)
+    VALUES(@OrderId, N'Note', @UserId, @UserName, @Content);
+END
+GO

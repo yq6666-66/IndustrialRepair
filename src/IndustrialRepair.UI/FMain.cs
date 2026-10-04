@@ -39,6 +39,7 @@ public class FMain : UIForm
         _user = user;
         Text = "工业维修智能化零件分配平台";
         ClientSize = new Size(1280, 760);
+        MinimumSize = new Size(1024, 600);   // R30：防止窗口过小导致按钮不可达
         StartPosition = FormStartPosition.CenterScreen;
         WindowState = FormWindowState.Maximized;
 
