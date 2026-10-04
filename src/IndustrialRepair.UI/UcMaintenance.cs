@@ -32,6 +32,10 @@ internal class UcMaintenance : UserControl, IRefreshable
     // ScottPlot
     private readonly ScottPlot.WinForms.FormsPlot _plot = new() { Dock = DockStyle.Fill };
 
+    /// <summary>WR5/FR12：停机原因固定分类（统计口径一致，禁止自由文本）。</summary>
+    internal static readonly string[] DowntimeReasons =
+        { "计划维护", "故障停机", "电气故障", "机械故障", "操作失误", "待料", "其他" };
+
     private static UIDataGridView FillGrid()
     {
         var g = Ui.Grid(0, 0, 100, 100);
@@ -96,24 +100,39 @@ internal class UcMaintenance : UserControl, IRefreshable
         var cmbDevice = Ui.Combo(80, 5, 200);
         dToolbar.Controls.Add(Ui.Lbl("设备：", 5, 9, 70));
         dToolbar.Controls.Add(cmbDevice);
-        dToolbar.Controls.Add(Ui.Btn("开始停机", 290, 4, 90, 30, (_, _) =>
+        // WR5/FR12：停机原因固定分类下拉（替代自由文本，保证统计口径一致）
+        var cmbReason = Ui.Combo(475, 5, 120);
+        cmbReason.Items.AddRange(DowntimeReasons);
+        cmbReason.SelectedIndex = 0;
+        cmbReason.DropDownStyle = UIDropDownStyle.DropDownList;
+        dToolbar.Controls.Add(Ui.Lbl("原因：", 400, 9, 70));
+        dToolbar.Controls.Add(cmbReason);
+        dToolbar.Controls.Add(Ui.Btn("开始停机", 605, 4, 90, 30, (_, _) =>
         {
             var dev = SelectedDevice(cmbDevice);
             if (dev == null) { Ui.Error("请选择设备。"); return; }
-            // FR12：停机原因分类下拉（替代自由输入）
-            var reasons = new[] { "计划维护", "故障停机", "电气故障", "机械故障", "操作失误", "待料", "其他" };
-            var reason = Ui.Input($"停机原因（可选：{string.Join("/", reasons)}）：", "原因：", "计划维护") ?? "计划维护";
-            var r = _downtime.Start(dev.DeviceId, reason, AppSession.Current?.UserName ?? "system");
+            var r = _downtime.Start(dev.DeviceId, cmbReason.Text, AppSession.Current?.UserName ?? "system");
             Ui.Info(r.Message);
             LoadDowntime();
         }));
-        dToolbar.Controls.Add(Ui.Btn("结束停机", 388, 4, 90, 30, (_, _) =>
+        dToolbar.Controls.Add(Ui.Btn("结束停机", 703, 4, 90, 30, (_, _) =>
         {
             var dev = SelectedDevice(cmbDevice);
             if (dev == null) { Ui.Error("请选择设备。"); return; }
             var r = _downtime.Stop(dev.DeviceId);
             Ui.Info(r.Message);
             LoadDowntime();
+        }));
+        // WR6/FR15：停机汇总导出 Excel（含可用率）
+        dToolbar.Controls.Add(Ui.Btn("导出Excel", 801, 4, 90, 30, (_, _) =>
+        {
+            try
+            {
+                if (_gridDowntime.DataSource is not DataTable dt || dt.Rows.Count == 0)
+                { Ui.Error("无数据可导出。"); return; }
+                Ui.Info("已导出：" + ExcelService.ExportTable(dt, "设备停机追踪", "停机汇总", totalRow: true));
+            }
+            catch (Exception ex) { Ui.Error("导出失败：" + ex.Message); }
         }));
         _cmbDevice = cmbDevice;
         tabDown.Controls.Add(_gridDowntime);
@@ -173,6 +192,7 @@ internal class UcMaintenance : UserControl, IRefreshable
         if (t.Columns.Contains("IntervalType")) t.Columns["IntervalType"]!.ColumnName = "触发方式";
         if (t.Columns.Contains("NextDueAt")) t.Columns["NextDueAt"]!.ColumnName = "下次到期";
         if (t.Columns.Contains("IsActive")) t.Columns["IsActive"]!.ColumnName = "启用";
+        if (t.Columns.Contains("GeneratedOrders")) t.Columns["GeneratedOrders"]!.ColumnName = "已生成工单";
         _gridPM.DataSource = t;
     }
 
@@ -187,11 +207,15 @@ internal class UcMaintenance : UserControl, IRefreshable
         t.Columns.Add("EOQ建议批量", typeof(double));
         t.Columns.Add("再订购点", typeof(double));
         t.Columns.Add("安全库存", typeof(double));
+        t.Columns.Add("首选供应商", typeof(string));
+        t.Columns.Add("供货价", typeof(decimal));
+        t.Columns.Add("交期(天)", typeof(int));
         t.Columns.Add("需订购", typeof(bool));
         t.Columns.Add("建议", typeof(string));
         foreach (var r in recs)
             t.Rows.Add(r.PartCode, r.PartName, r.CurrentStock, r.AnnualDemandQty,
                 Math.Ceiling(r.Eoq), Math.Ceiling(r.ReorderPoint), Math.Ceiling(r.SafetyStock),
+                r.VendorName ?? "—", r.SupplyPrice ?? 0m, r.LeadTimeDays,
                 r.ShouldReorder, r.Recommendation);
         _gridEOQ.DataSource = t;
 

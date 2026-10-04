@@ -31,7 +31,9 @@ public class MaintenanceScheduleService
             @"SELECT ms.ScheduleId, ms.DeviceId, d.DeviceName, ms.Title,
                      ms.IntervalType, ms.IntervalDays, ms.IntervalHours,
                      ms.LastExecutedAt, ms.NextDueAt, ms.IsActive,
-                     ms.TemplateDesc, ms.TemplatePriority
+                     ms.TemplateDesc, ms.TemplatePriority,
+                     (SELECT COUNT(*) FROM dbo.work_order wo
+                      WHERE wo.ScheduleId = ms.ScheduleId) AS GeneratedOrders
               FROM dbo.maintenance_schedule ms
               JOIN dbo.device d ON d.DeviceId = ms.DeviceId
               WHERE (@A IS NULL OR ms.IsActive = @A)
@@ -104,6 +106,13 @@ public class MaintenanceScheduleService
                     r["TemplatePriority"].ToString()!, null, null);
                 created.Add(orderNo);
 
+                // WR4/FR4：回写硬关联（工单 → 调度）。
+                // 注意 _orders.Create 返回的是数字 OrderId 字符串（非 OrderNo），按主键回写。
+                DbHelper.ExecuteNonQuery(
+                    @"UPDATE dbo.work_order SET ScheduleId = @S WHERE OrderId = @OID",
+                    CommandType.Text,
+                    DbHelper.P("@S", Convert.ToInt32(r["ScheduleId"])), DbHelper.P("@OID", Convert.ToInt32(orderNo)));
+
                 // 更新执行时间与下次到期
                 DbHelper.ExecuteNonQuery(
                     @"UPDATE dbo.maintenance_schedule
@@ -129,7 +138,8 @@ public record InventoryRecommendation(
     string PartCode, string PartName, int CurrentStock, int MinStock,
     decimal AnnualDemandQty, decimal UnitPrice,
     double Eoq, double ReorderPoint, double SafetyStock,
-    bool ShouldReorder, string Recommendation);
+    bool ShouldReorder, string Recommendation,
+    string? VendorName = null, decimal? SupplyPrice = null, int LeadTimeDays = InventoryOptimizer.DefaultLeadTimeDays);
 
 /// <summary>
 /// 库存优化服务（R44）：基于消耗历史计算 EOQ / ROP / 安全库存。
@@ -174,16 +184,26 @@ public static class InventoryOptimizer
     public static double CalculateSafetyStock(double dailyDemandStdDev, int leadTimeDays,
         double z = ServiceLevelZ) => z * dailyDemandStdDev * Math.Sqrt(leadTimeDays);
 
+    /// <summary>WR2/FR7：交期选择——首选供应商实际交期有效则用之，否则回退默认 14 天。</summary>
+    public static int ResolveLeadTime(int? actualLeadTimeDays) =>
+        actualLeadTimeDays is > 0 ? actualLeadTimeDays.Value : DefaultLeadTimeDays;
+
     /// <summary>对全部配件生成库存优化建议（需有消耗历史）。</summary>
     public static List<InventoryRecommendation> GenerateRecommendations()
     {
-        // 从消耗分析视图取年用量 + 计算日需求标准差
+        // 从消耗分析视图取年用量 + 首选供应商（WR2/FR7：OUTER APPLY 取首选优先、其次最便宜的关联）
         var consumption = DbHelper.GetTable(
             @"SELECT ca.PartId, ca.PartCode, ca.PartName, ca.TotalQty, ca.TotalCost,
                      p.StockQty, p.MinStock, p.Price,
-                     ca.Qty30d  -- 近30天用量（用于估日均需求）
+                     ca.Qty30d,  -- 近30天用量（用于估日均需求）
+                     sup.VendorName, sup.SupplyPrice, sup.LeadTimeDays
               FROM dbo.vw_ConsumptionAnalysis ca
-              JOIN dbo.part p ON p.PartId = ca.PartId");
+              JOIN dbo.part p ON p.PartId = ca.PartId
+              OUTER APPLY (SELECT TOP 1 v.VendorName, pv.SupplyPrice, pv.LeadTimeDays
+                           FROM dbo.part_vendor pv
+                           JOIN dbo.vendor v ON v.VendorId = pv.VendorId
+                           WHERE pv.PartId = ca.PartId
+                           ORDER BY pv.IsPreferred DESC, pv.SupplyPrice ASC) sup");
 
         // 取日需求标准差（从流水表近似）— FR6 修复：按 CreatedAt 日期分组而非 RefNo
         var demandVariability = DbHelper.GetTable(
@@ -211,19 +231,28 @@ public static class InventoryOptimizer
             var stdDev = stdDevMap.TryGetValue(partId, out var sd) ? sd : avgDaily * 0.3;
 
             var eoq = CalculateEoq(annualQty, unitPrice);
-            var safetyStock = CalculateSafetyStock(stdDev, DefaultLeadTimeDays);
-            var rop = CalculateReorderPoint(avgDaily, DefaultLeadTimeDays, safetyStock);
+            // WR2/FR7：交期用首选供应商实际值，无关联时回退默认 14 天
+            var leadTime = ResolveLeadTime(
+                r["LeadTimeDays"] == DBNull.Value ? null : Convert.ToInt32(r["LeadTimeDays"]));
+            var safetyStock = CalculateSafetyStock(stdDev, leadTime);
+            var rop = CalculateReorderPoint(avgDaily, leadTime, safetyStock);
             var shouldReorder = currentStock <= rop;
 
+            var vendorName = r["VendorName"] == DBNull.Value ? null : r["VendorName"].ToString();
+            var supplyPrice = r["SupplyPrice"] == DBNull.Value ? (decimal?)null : Convert.ToDecimal(r["SupplyPrice"]);
+
             var rec = shouldReorder
-                ? $"建议订购 {Math.Ceiling(eoq):F0} 个（当前 {currentStock} ≤ 再订购点 {rop:F0}）"
+                ? $"建议向「{vendorName ?? "默认渠道"}」订购 {Math.Ceiling(eoq):F0} 个"
+                  + (supplyPrice.HasValue ? $"（供货价 {supplyPrice:F2} 元/个）" : "")
+                  + $"，交期 {leadTime} 天（当前 {currentStock} ≤ 再订购点 {rop:F0}）"
                 : $"库存充足（{currentStock} > ROP {rop:F0}）";
 
             result.Add(new InventoryRecommendation(
                 r["PartCode"].ToString()!, r["PartName"].ToString()!,
                 currentStock, Convert.ToInt32(r["MinStock"]),
                 Convert.ToDecimal(annualQty), Convert.ToDecimal(unitPrice),
-                eoq, rop, safetyStock, shouldReorder, rec));
+                eoq, rop, safetyStock, shouldReorder, rec,
+                vendorName, supplyPrice, leadTime));
         }
         return result;
     }

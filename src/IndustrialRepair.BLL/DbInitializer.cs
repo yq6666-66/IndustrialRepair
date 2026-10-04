@@ -19,8 +19,8 @@ namespace IndustrialRepair.BLL;
 /// </summary>
 public class DbInitializer
 {
-    /// <summary>当前代码要求的结构版本（与 db/04+05+06 迁移脚本对应）</summary>
-    public const int SchemaVersion = 4;
+    /// <summary>当前代码要求的结构版本（与 db/04+05+06+07 迁移脚本对应）</summary>
+    public const int SchemaVersion = 5;
 
     private readonly UserRepository _users = new();
     private readonly WorkOrderRepository _orders = new();
@@ -122,6 +122,14 @@ CREATE TABLE dbo.schema_version(
                 current = 4;
             }
 
+            if (current < 5)
+            {
+                RunManaged(conn, tran, "07_pm_order_link.sql",
+                    "PM 调度与工单硬关联：work_order.ScheduleId 外键 + 过滤索引");
+                InsertVersion(conn, tran, 5, "PM 工单关联（07_pm_order_link.sql）");
+                current = 5;
+            }
+
             if (current > SchemaVersion)
                 throw new InvalidOperationException(
                     $"数据库结构版本({current})高于程序支持版本({SchemaVersion})，请升级程序。");
@@ -201,7 +209,8 @@ SELECT
  (CASE WHEN COL_LENGTH(N'dbo.picking_list', N'ReviewSnapshot') IS NULL THEN 1 ELSE 0 END)+
  (CASE WHEN NOT EXISTS(SELECT 1 FROM sys.indexes WHERE name=N'UQ_picking_pending_per_order') THEN 1 ELSE 0 END)+
  (CASE WHEN OBJECT_ID(N'dbo.usp_GeneratePicking', N'P') IS NULL THEN 1 ELSE 0 END)+
- (CASE WHEN OBJECT_ID(N'dbo.trg_WorkOrder_Record', N'TR') IS NULL THEN 1 ELSE 0 END)";
+ (CASE WHEN OBJECT_ID(N'dbo.trg_WorkOrder_Record', N'TR') IS NULL THEN 1 ELSE 0 END)+
+ (CASE WHEN COL_LENGTH(N'dbo.work_order', N'ScheduleId') IS NULL THEN 1 ELSE 0 END)";
 
     private static void RunManaged(SqlConnection conn, SqlTransaction tran, string file, string desc)
     {

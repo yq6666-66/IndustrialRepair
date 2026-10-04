@@ -28,7 +28,7 @@ internal class FAbout : UIForm
         };
         var lblVersion = new UILabel
         {
-            Text = $"v1.1.0 · .NET 8 · 三层架构 · {DateTime.Now:yyyy-MM-dd}", AutoSize = true,
+            Text = $"v1.6.0 · .NET 8 · 三层架构 · {DateTime.Now:yyyy-MM-dd}", AutoSize = true,
             Location = new Point(24, 52), Font = new Font("微软雅黑", 9F), ForeColor = Color.Gray
         };
 
@@ -59,13 +59,14 @@ internal class FAbout : UIForm
             $"邮件通道：{(EmailSenderFactory.Create().Enabled ? "SMTP 已配置" : "演示模式（未配置 Smtp）")}\n" +
             $"主题：{(Theme.IsDark ? "暗色" : "亮色")}\n" +
             $"\n── 测试基线 ──\n" +
-            $"单元测试：113/113 通过\n" +
-            $"端到端冒烟：74/74 通过\n" +
+            $"单元测试：131/131 通过\n" +
+            $"端到端冒烟：81/81 通过\n" +
             $"安全扫描：Mimosa 深度扫描 0 发现项\n" +
             $"\n── 开源组件 ──\n" +
-            $"15 个直接依赖（SunnyUI/OpenCvSharp/OnnxRuntime/MailKit/\n" +
+            $"17 个直接依赖（SunnyUI/OpenCvSharp/OnnxRuntime/MailKit/\n" +
             $"QuestPDF/CsvHelper/Quartz/Serilog/Polly/FluentValidation/\n" +
-            $"FuzzySharp/Bogus/QRCoder/ZXing.Net/ClosedXML/MQTTnet）\n" +
+            $"FuzzySharp/Bogus/QRCoder/ZXing.Net/ClosedXML/MQTTnet/\n" +
+            $"ScottPlot/BCrypt.Net-Next）\n" +
             $"\n── 快捷键 ──\n" +
             $"Ctrl+K 全局搜索 · F5 刷新当前页 · F11 大屏全屏 · ESC 关闭对话框";
 

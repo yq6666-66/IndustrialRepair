@@ -452,6 +452,15 @@ var pmSave = pmSvc.Save(new MaintenanceSchedule(0, devices[0].DeviceId, devices[
 Check("PM调度保存", pmSave.Success, pmSave.Message);
 var pmCreated = pmSvc.CheckAndGenerate();
 Check("PM到期自动建单(R41)", pmCreated.Count >= 1, $"生成 {pmCreated.Count} 张：{string.Join(",", pmCreated.Take(3))}");
+// WR4/FR4：硬关联回写——自动生成的工单必须带 ScheduleId
+// （pmCreated 元素为数字 OrderId 字符串，非 OrderNo）
+if (pmCreated.Count > 0)
+{
+    var linked = Convert.ToInt32(IndustrialRepair.DAL.DbHelper.ExecuteScalar(
+        "SELECT COUNT(*) FROM dbo.work_order WHERE OrderId=@OID AND ScheduleId IS NOT NULL",
+        System.Data.CommandType.Text, IndustrialRepair.DAL.DbHelper.P("@OID", Convert.ToInt32(pmCreated[0]))) ?? 0);
+    Check("PM工单硬关联回写(WR4)", linked == 1, $"工单 OrderId={pmCreated[0]} ScheduleId 已回写");
+}
 
 // 11.2 EOQ：计算建议
 var recs = InventoryOptimizer.GenerateRecommendations();

@@ -74,4 +74,35 @@ public class InventoryOptimizerTests
     {
         Assert.Equal(100, DowntimeService.ComputeAvailability(100, 0));
     }
+
+    [Theory]
+    [InlineData(null, 14)]     // 无关联 → 默认 14 天
+    [InlineData(0, 14)]        // 零值视为无效 → 默认
+    [InlineData(-3, 14)]       // 负值视为无效 → 默认
+    [InlineData(7, 7)]         // 实际交期 7 天 → 采用
+    [InlineData(30, 30)]       // 实际交期 30 天 → 采用
+    public void 交期选择_实际有效则用之否则回退默认(int? actual, int expected)
+    {
+        Assert.Equal(expected, InventoryOptimizer.ResolveLeadTime(actual));
+    }
+
+    [Fact]
+    public void 建议记录_供应商字段默认值()
+    {
+        // WR2：新字段带默认值，旧构造调用（无供应商信息）不应破坏
+        var rec = new InventoryRecommendation("P001", "轴承", 10, 2, 100m, 5m, 20, 30, 8, true, "建议订购");
+        Assert.Null(rec.VendorName);
+        Assert.Null(rec.SupplyPrice);
+        Assert.Equal(InventoryOptimizer.DefaultLeadTimeDays, rec.LeadTimeDays);
+    }
+
+    [Fact]
+    public void 建议记录_供应商字段赋值()
+    {
+        var rec = new InventoryRecommendation("P001", "轴承", 10, 2, 100m, 5m, 20, 30, 8, true, "建议订购",
+            "华东五金", 4.5m, 7);
+        Assert.Equal("华东五金", rec.VendorName);
+        Assert.Equal(4.5m, rec.SupplyPrice);
+        Assert.Equal(7, rec.LeadTimeDays);
+    }
 }

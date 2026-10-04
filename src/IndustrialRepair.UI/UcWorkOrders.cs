@@ -528,8 +528,19 @@ internal class FOrderDetail : UIForm
         var o = _svc.Get(orderId);
         if (o == null) { Ui.Error("工单不存在。"); Close(); return; }
 
+        // WR7/FR4：PM 来源标注（硬关联 work_order.ScheduleId，替代描述文本匹配）
+        var pmScheduleId = 0;
+        try
+        {
+            pmScheduleId = Convert.ToInt32(DbHelper.ExecuteScalar(
+                "SELECT ScheduleId FROM dbo.work_order WHERE OrderId=@Id",
+                System.Data.CommandType.Text, DbHelper.P("@Id", orderId)) ?? 0);
+        }
+        catch { /* 列缺失（旧库未迁移）时不阻塞详情 */ }
+
         _info.Text =
-            $"工单号：{o.OrderNo}    设备：{o.DeviceCode} {o.DeviceName}\n" +
+            $"工单号：{o.OrderNo}    设备：{o.DeviceCode} {o.DeviceName}" +
+            (pmScheduleId > 0 ? $"    [来自 PM 调度 #{pmScheduleId}]" : "") + "\n" +
             $"状态：{OrderStatusCode.ToChinese(o.Status)}    优先级：{PriorityCode.ToChinese(o.Priority)}    " +
             $"报修人：{o.ReporterName}    工程师：{o.EngineerName ?? "-"}\n" +
             $"报修：{o.CreatedAt:MM-dd HH:mm}    接单：{(o.StartTime == null ? "-" : o.StartTime.Value.ToString("MM-dd HH:mm"))}    " +
