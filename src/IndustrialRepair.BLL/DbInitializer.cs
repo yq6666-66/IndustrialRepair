@@ -19,8 +19,8 @@ namespace IndustrialRepair.BLL;
 /// </summary>
 public class DbInitializer
 {
-    /// <summary>当前代码要求的结构版本（与 db/04 迁移脚本对应）</summary>
-    public const int SchemaVersion = 2;
+    /// <summary>当前代码要求的结构版本（与 db/04+05 迁移脚本对应）</summary>
+    public const int SchemaVersion = 3;
 
     private readonly UserRepository _users = new();
     private readonly WorkOrderRepository _orders = new();
@@ -104,6 +104,14 @@ CREATE TABLE dbo.schema_version(
                     "材料审阅字段 + 写入校验（CHECK 约束 / 一工单一张 Pending 单唯一索引）");
                 InsertVersion(conn, tran, 2, "材料审阅与写入校验（04_material_review_migration.sql）");
                 current = 2;
+            }
+
+            if (current < 3)
+            {
+                RunManaged(conn, tran, "05_performance_indexes.sql",
+                    "性能索引：工单 SLA 扫描/配件搜索/库存流水/审计查询 6 条复合索引");
+                InsertVersion(conn, tran, 3, "性能索引（05_performance_indexes.sql）");
+                current = 3;
             }
 
             if (current > SchemaVersion)

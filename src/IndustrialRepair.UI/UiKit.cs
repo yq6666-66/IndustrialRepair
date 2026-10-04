@@ -78,6 +78,64 @@ internal static class Ui
         g.AlternatingRowsDefaultCellStyle.ForeColor = t.TextPrimary;
     }
 
+    /* ---- R3：表格列宽持久化 ---- */
+
+    /// <summary>表格列宽持久化键前缀。</summary>
+    private const string ColWidthKey = "gridColWidths";
+
+    /// <summary>恢复表格列宽（从 ui.json）；在 DataSource 设置后调用。</summary>
+    public static void RestoreColumnWidths(DataGridView grid, string pageKey)
+    {
+        try
+        {
+            var prefs = LoadUiPrefs();
+            if (!prefs.TryGetValue($"{ColWidthKey}:{pageKey}", out var widths)) return;
+            var parts = widths.Split(',');
+            for (int i = 0; i < parts.Length && i < grid.Columns.Count; i++)
+                if (int.TryParse(parts[i], out var w) && w > 10 && w < 2000)
+                    grid.Columns[i].Width = w;
+        }
+        catch { }
+    }
+
+    /// <summary>保存表格列宽到 ui.json。</summary>
+    public static void SaveColumnWidths(DataGridView grid, string pageKey)
+    {
+        try
+        {
+            var widths = string.Join(",", grid.Columns.Cast<DataGridViewColumn>().Select(c => c.Width));
+            var prefs = LoadUiPrefs();
+            prefs[$"{ColWidthKey}:{pageKey}"] = widths;
+            SaveUiPrefs(prefs);
+        }
+        catch { }
+    }
+
+    private static Dictionary<string, string> LoadUiPrefs()
+    {
+        try
+        {
+            var file = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "IndustrialRepair", "ui.json");
+            if (!File.Exists(file)) return new Dictionary<string, string>();
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(file));
+            return doc.RootElement.EnumerateObject()
+                .ToDictionary(p => p.Name, p => p.Value.GetString() ?? "");
+        }
+        catch { return new Dictionary<string, string>(); }
+    }
+
+    private static void SaveUiPrefs(Dictionary<string, string> prefs)
+    {
+        var file = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "IndustrialRepair", "ui.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        var json = System.Text.Json.JsonSerializer.Serialize(prefs);
+        File.WriteAllText(file, json);
+    }
+
     /// <summary>忙碌光标包装：数据库/导出等操作期间显示等待光标，异常也复位。</summary>
     public static void Busy(Action body)
     {

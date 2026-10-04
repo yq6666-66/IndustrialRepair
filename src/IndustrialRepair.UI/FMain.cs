@@ -28,6 +28,7 @@ public class FMain : UIForm
     private readonly System.Windows.Forms.Timer _clockTimer = new();
     private Panel? _header;
     private UIButton? _btnTheme;
+    private string _lastPageKey = "";
 
     private sealed record NavItem(string Key, string Text, string Perm);
     private sealed record NavGroup(string Title, NavItem[] Items);
@@ -172,7 +173,14 @@ public class FMain : UIForm
             Location = new Point(ClientSize.Width - 448, 6), Size = new Size(430, 18),
             AutoSize = false, TextAlign = ContentAlignment.MiddleRight
         };
-        status.Controls.AddRange(new Control[] { lblDb, _lblClock });
+        var lblAbout = new UILabel
+        {
+            Text = "关于", AutoSize = true, Location = new Point(ClientSize.Width - 520, 6),
+            Font = new Font("微软雅黑", 8.5F), ForeColor = Color.FromArgb(41, 108, 202),
+            Cursor = Cursors.Hand
+        };
+        lblAbout.Click += (_, _) => new FAbout().ShowDialog(this);
+        status.Controls.AddRange(new Control[] { lblDb, _lblClock, lblAbout });
         _clockTimer.Interval = 1000;
         _clockTimer.Tick += (_, _) => TickClock();
         TickClock();
@@ -235,6 +243,10 @@ public class FMain : UIForm
         {
             NotificationCenter.Raised -= OnNotification;
             ScheduleHost.Stop();
+            // R3：保存当前页面列宽
+            if (_content.Controls.Count > 0 && !string.IsNullOrEmpty(_lastPageKey))
+                foreach (Control c in _content.Controls[0].Controls)
+                    if (c is UIDataGridView g) Ui.SaveColumnWidths(g, _lastPageKey);
             _tray.Visible = false;
             _tray.Icon?.Dispose();
             _tray.Dispose();
@@ -346,6 +358,13 @@ public class FMain : UIForm
         AppSession.Touch();
 
         if (page is IRefreshable r) r.RefreshData();
+
+        // R3：恢复列宽（DataSource 已就位）
+        foreach (Control c in page.Controls)
+            if (c is UIDataGridView g) Ui.RestoreColumnWidths(g, key);
+
+        // R3：保存上一个页面的列宽（在 Clear 前无法取到，此处延迟到下次切换或关闭）
+        _lastPageKey = key;
 
         // 高亮当前导航 + 页头显示当前模块名
         foreach (var (k, b) in _navButtons)
