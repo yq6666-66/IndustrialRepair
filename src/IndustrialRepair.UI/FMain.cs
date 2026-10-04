@@ -29,6 +29,7 @@ public class FMain : UIForm
     private Panel? _header;
     private UIButton? _btnTheme;
     private string _lastPageKey = "";
+    private UILabel? _lblHealth;
 
     private sealed record NavItem(string Key, string Text, string Perm);
     private sealed record NavGroup(string Title, NavItem[] Items);
@@ -180,7 +181,15 @@ public class FMain : UIForm
             Cursor = Cursors.Hand
         };
         lblAbout.Click += (_, _) => new FAbout().ShowDialog(this);
-        status.Controls.AddRange(new Control[] { lblDb, _lblClock, lblAbout });
+
+        // R13：连接健康指示灯（时钟 Timer 每 30 秒刷新颜色）
+        _lblHealth = new UILabel
+        {
+            Text = "● 已连接", AutoSize = true, Location = new Point(ClientSize.Width - 570, 6),
+            Font = new Font("微软雅黑", 8.5F), ForeColor = Color.FromArgb(80, 160, 90),
+            Cursor = Cursors.Hand, Tag = "health"
+        };
+        status.Controls.AddRange(new Control[] { lblDb, _lblClock, lblAbout, _lblHealth });
         _clockTimer.Interval = 1000;
         _clockTimer.Tick += (_, _) => TickClock();
         TickClock();
@@ -311,10 +320,28 @@ public class FMain : UIForm
         }
     }
 
-    private void TickClock() =>
+    private void TickClock()
+    {
         _lblClock.Text = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
             + " 星期" + "日一二三四五六"[(int)DateTime.Now.DayOfWeek]
             + "  ·  F5 刷新 · Ctrl+K 搜索";
+
+        // R13：连接健康指示（每次时钟滴答检测一次）
+        if (_lblHealth != null)
+        {
+            try
+            {
+                IndustrialRepair.DAL.DbHelper.ExecuteScalar("SELECT 1");
+                _lblHealth.Text = "● 已连接";
+                _lblHealth.ForeColor = Color.FromArgb(80, 160, 90);
+            }
+            catch
+            {
+                _lblHealth.Text = "● 断开";
+                _lblHealth.ForeColor = Color.Firebrick;
+            }
+        }
+    }
 
     /// <summary>F5 刷新 / Ctrl+K 全局搜索（R4 + OR6）。</summary>
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)

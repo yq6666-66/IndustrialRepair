@@ -96,12 +96,18 @@ internal class UcParts : UserControl, IRefreshable
             }
             catch (Exception ex) { Ui.Error("标签生成失败：" + ex.Message); }
         });
+        var btnAdjust = Ui.Btn("盘点", 825, 46, 70, 32, (_, _) =>
+        {
+            using var dlg = new FStockAdjust();
+            dlg.ShowDialog();
+            LoadParts(1, _pageSize);
+        });
 
         var toolbar = new Panel { Dock = DockStyle.Top, Height = 84 };
         toolbar.Controls.AddRange(new Control[]
         {
             Ui.Lbl("关键字：", 4, 14, 80), _txtKey, Ui.Lbl("类别：", 346, 14, 48), _cmbCat,
-            btnQuery, btnAdd, btnEdit, btnDel, btnIn, btnLow, btnLog, btnQr, btnXls, btnPdf, btnImport, btnLabels
+            btnQuery, btnAdd, btnEdit, btnDel, btnIn, btnLow, btnLog, btnQr, btnXls, btnPdf, btnImport, btnLabels, btnAdjust
         });
 
         // Dock 布局（同 FMain 模式）：填充控件先加，标题条最后加；分页条在工具栏之下
