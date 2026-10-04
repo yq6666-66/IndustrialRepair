@@ -123,7 +123,11 @@ public class FMain : UIForm
                 new NavItem("serial", "串口·扫码",    "serial.port"),
                 new NavItem("iot",    "IoT·MQTT遥测", "serial.port")
             }),
-            new("系统管理", new[] { new NavItem("users", "用户与日志", "user.manage") })
+            new("管理", new[]
+            {
+                new NavItem("maintenance", "维护计划中心", "dashboard.view"),   // R41-R45：PM/EOQ/供应商/停机
+                new NavItem("users", "用户与日志", "user.manage")
+            })
         };
         int y = 12;
         foreach (var grp in groups)
@@ -376,6 +380,7 @@ public class FMain : UIForm
                 "iot"       => new UcIoT(),
                 "users"     => new UcUsers(),
                 "report"    => new UcReport(),
+                "maintenance" => new UcMaintenance(),
                 _ => new UcDashboard()
             };
             page.Dock = DockStyle.Fill;

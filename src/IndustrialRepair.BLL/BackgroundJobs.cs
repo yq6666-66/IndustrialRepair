@@ -87,6 +87,27 @@ public class StaleOrderScanJob : IJob
 }
 
 /// <summary>
+/// 预防性维护调度作业（R41）：每 30 分钟检查到期 PM → 自动生成工单。
+/// </summary>
+public class PreventiveMaintenanceJob : IJob
+{
+    public Task Execute(IJobExecutionContext context)
+    {
+        RunOnce();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>执行一次到期检查（返回生成的工单号列表）。</summary>
+    public static List<string> RunOnce()
+    {
+        var created = new MaintenanceScheduleService().CheckAndGenerate();
+        if (created.Count > 0)
+            FileLog.Write($"[PM] 自动生成 {created.Count} 张预防性维护工单：{string.Join(", ", created)}");
+        return created;
+    }
+}
+
+/// <summary>
 /// 调度宿主（Quartz.NET）：FMain 登录后 Start，关闭时 Stop。
 /// 启动即先同步跑一轮便于演示立即见效；重复 Start 幂等。
 /// </summary>
@@ -112,8 +133,13 @@ public static class ScheduleHost
                 var staleTrig = TriggerBuilder.Create().WithIdentity("staleScanTrig")
                     .WithCronSchedule("0 0/30 * * * ?").Build();        // 每 30 分钟
 
+                var pm = JobBuilder.Create<PreventiveMaintenanceJob>().WithIdentity("pmCheck").Build();
+                var pmTrig = TriggerBuilder.Create().WithIdentity("pmCheckTrig")
+                    .WithCronSchedule("0 5/30 * * * ?").Build();        // 每 30 分钟（偏移 5 分钟避免同时触发）
+
                 _scheduler.ScheduleJob(digest, digestTrig);
                 _scheduler.ScheduleJob(stale, staleTrig);
+                _scheduler.ScheduleJob(pm, pmTrig);
                 _scheduler.Start();
 
                 // 启动即跑一轮（后台线程，不阻塞登录）

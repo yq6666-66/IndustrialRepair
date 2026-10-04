@@ -19,8 +19,8 @@ namespace IndustrialRepair.BLL;
 /// </summary>
 public class DbInitializer
 {
-    /// <summary>当前代码要求的结构版本（与 db/04+05 迁移脚本对应）</summary>
-    public const int SchemaVersion = 3;
+    /// <summary>当前代码要求的结构版本（与 db/04+05+06 迁移脚本对应）</summary>
+    public const int SchemaVersion = 4;
 
     private readonly UserRepository _users = new();
     private readonly WorkOrderRepository _orders = new();
@@ -112,6 +112,14 @@ CREATE TABLE dbo.schema_version(
                     "性能索引：工单 SLA 扫描/配件搜索/库存流水/审计查询 6 条复合索引");
                 InsertVersion(conn, tran, 3, "性能索引（05_performance_indexes.sql）");
                 current = 3;
+            }
+
+            if (current < 4)
+            {
+                RunManaged(conn, tran, "06_new_features.sql",
+                    "新功能：PM调度/供应商/停机追踪/配件-供应商关联");
+                InsertVersion(conn, tran, 4, "新功能表（06_new_features.sql）");
+                current = 4;
             }
 
             if (current > SchemaVersion)
