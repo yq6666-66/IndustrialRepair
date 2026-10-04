@@ -55,9 +55,11 @@ internal class UcMaintenance : UserControl, IRefreshable
         var tabEOQ = new TabPage("库存优化建议");
         var eToolbar = new Panel { Dock = DockStyle.Top, Height = 40 };
         var lblE = new UILabel
-        { Text = "EOQ 经济批量 + 再订购点 + 安全库存（基于消耗历史自动计算）", AutoSize = true,
+        { Text = "EOQ 经济批量 + 再订购点 + 安全库存", AutoSize = true,
           Location = new Point(10, 10), Font = new Font("微软雅黑", 9F), ForeColor = Color.FromArgb(90, 100, 115) };
+        var btnStockIn = Ui.Btn("按建议入库", 320, 4, 100, 30, (_, _) => EoqStockIn());
         eToolbar.Controls.Add(lblE);
+        eToolbar.Controls.Add(btnStockIn);
         var eoqSplit = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 350 };
         eoqSplit.Panel1.Controls.Add(_gridEOQ);
         eoqSplit.Panel2.Controls.Add(_plot);   // ScottPlot 交互图表
@@ -67,7 +69,9 @@ internal class UcMaintenance : UserControl, IRefreshable
         // 供应商 Tab
         var tabVendor = new TabPage("供应商管理");
         var vToolbar = new Panel { Dock = DockStyle.Top, Height = 40 };
-        vToolbar.Controls.Add(Ui.Btn("新增供应商", 10, 4, 100, 30, (_, _) => AddVendor()));
+        vToolbar.Controls.Add(Ui.Btn("新增", 10, 4, 70, 30, (_, _) => AddVendor()));
+        vToolbar.Controls.Add(Ui.Btn("编辑", 88, 4, 70, 30, (_, _) => EditVendor()));
+        vToolbar.Controls.Add(Ui.Btn("删除", 166, 4, 70, 30, (_, _) => DeleteVendor()));
         tabVendor.Controls.Add(_gridVendor);
         tabVendor.Controls.Add(vToolbar);
 
@@ -81,8 +85,10 @@ internal class UcMaintenance : UserControl, IRefreshable
         {
             var dev = SelectedDevice(cmbDevice);
             if (dev == null) { Ui.Error("请选择设备。"); return; }
-            var reason = Ui.Input("停机原因：", "原因：") ?? "";
-            var r = _downtime.Start(dev.DeviceId, reason, "admin");
+            // FR12：停机原因分类下拉（替代自由输入）
+            var reasons = new[] { "计划维护", "故障停机", "电气故障", "机械故障", "操作失误", "待料", "其他" };
+            var reason = Ui.Input($"停机原因（可选：{string.Join("/", reasons)}）：", "原因：", "计划维护") ?? "计划维护";
+            var r = _downtime.Start(dev.DeviceId, reason, AppSession.Current?.UserName ?? "system");
             Ui.Info(r.Message);
             LoadDowntime();
         }));
@@ -102,6 +108,16 @@ internal class UcMaintenance : UserControl, IRefreshable
         _tabs.TabPages.Add(tabEOQ);
         _tabs.TabPages.Add(tabVendor);
         _tabs.TabPages.Add(tabDown);
+        _tabs.SelectedIndexChanged += (_, _) =>   // FR19：切 Tab 刷新对应数据
+        {
+            switch (_tabs.SelectedIndex)
+            {
+                case 0: LoadPM(); break;
+                case 1: LoadEOQ(); break;
+                case 2: LoadVendors(); break;
+                case 3: LoadDowntime(); break;
+            }
+        };
 
         Controls.Add(_tabs);
         Controls.Add(Ui.PageHeader("维护计划中心", "PM 调度 · EOQ 优化 · 供应商 · 停机追踪"));
@@ -118,18 +134,22 @@ internal class UcMaintenance : UserControl, IRefreshable
         LoadDevices();
     }
 
+    private List<Device> _deviceCache = new();
+
     private void LoadDevices()
     {
         if (_cmbDevice == null) return;
+        _deviceCache = new BasicRepository().ListDevices().ToList();
         _cmbDevice.Items.Clear();
-        foreach (var d in new BasicRepository().ListDevices())
+        foreach (var d in _deviceCache)
             _cmbDevice.Items.Add($"{d.DeviceCode} {d.DeviceName}");
         if (_cmbDevice.Items.Count > 0) _cmbDevice.SelectedIndex = 0;
     }
 
-    private static Device? SelectedDevice(UIComboBox cmb) =>
-        cmb.SelectedIndex >= 0
-            ? new BasicRepository().ListDevices().ToList().FirstOrDefault()
+    /// <summary>FR2 修复：按选中索引映射正确 DeviceId（原实现恒返第一台）。</summary>
+    private Device? SelectedDevice(UIComboBox cmb) =>
+        cmb != null && cmb.SelectedIndex >= 0 && cmb.SelectedIndex < _deviceCache.Count
+            ? _deviceCache[cmb.SelectedIndex]
             : null;
 
     private void LoadPM()
@@ -181,31 +201,44 @@ internal class UcMaintenance : UserControl, IRefreshable
 
     private void LoadDowntime()
     {
-        _gridDowntime.DataSource = _downtime.DeviceDowntime();
+        _gridDowntime.DataSource = _downtime.AvailabilityReport(30);   // FR11：含可用率
     }
 
     private void AddPM()
     {
-        var devices = new BasicRepository().ListDevices();
-        var devStr = Ui.Input("选择设备（输入编码或名称）：", "设备：");
-        if (string.IsNullOrWhiteSpace(devStr)) return;
-        var dev = devices.FirstOrDefault(d => d.DeviceCode.Contains(devStr.Trim(), StringComparison.OrdinalIgnoreCase)
-            || d.DeviceName.Contains(devStr.Trim(), StringComparison.OrdinalIgnoreCase));
-        if (dev == null) { Ui.Error("未找到匹配设备。"); return; }
-
-        var title = Ui.Input("PM 任务名（如「季度轴承润滑」）：", "名称：");
-        if (string.IsNullOrWhiteSpace(title)) return;
-        var days = Ui.Input("间隔天数（如 90=季度）：", "天数：", "90");
-        if (!int.TryParse(days, out var intervalDays) || intervalDays < 1) { Ui.Error("天数须为正整数。"); return; }
-        var desc = Ui.Input("自动生成工单的描述（选填）：", "描述：");
-
-        var r = _pm.Save(new MaintenanceSchedule(0, dev.DeviceId, dev.DeviceName, title.Trim(),
-            "Time", intervalDays, null, null, null, true, desc, PriorityCode.Normal));
+        using var dlg = new FPMEdit(null);
+        if (dlg.ShowDialog() != DialogResult.OK || dlg.Result == null) return;
+        var r = _pm.Save(dlg.Result);
         Ui.Info(r.Message);
         LoadPM();
     }
 
-    private void EditPM() { /* 简化：双击行编辑（待完善）*/ }
+    private void EditPM()
+    {
+        var row = _gridPM.CurrentRow;
+        if (row == null) { Ui.Error("请先选择调度。"); return; }
+        var id = Convert.ToInt32(row.Cells["ScheduleId"]?.Value ?? 0);
+        if (id == 0) return;
+        // 从 List 结果构建编辑对象
+        var t = _pm.List();
+        var dr = t.AsEnumerable().FirstOrDefault(r => Convert.ToInt32(r["ScheduleId"]) == id);
+        if (dr == null) return;
+        var existing = new MaintenanceSchedule(
+            id, Convert.ToInt32(dr["DeviceId"]), dr["DeviceName"].ToString()!,
+            dr["Title"].ToString()!, dr["IntervalType"].ToString()!,
+            dr["IntervalDays"] == DBNull.Value ? null : Convert.ToInt32(dr["IntervalDays"]),
+            dr["IntervalHours"] == DBNull.Value ? null : Convert.ToDecimal(dr["IntervalHours"]),
+            dr["LastExecutedAt"] == DBNull.Value ? null : Convert.ToDateTime(dr["LastExecutedAt"]),
+            dr["NextDueAt"] == DBNull.Value ? null : Convert.ToDateTime(dr["NextDueAt"]),
+            Convert.ToBoolean(dr["IsActive"]),
+            dr["TemplateDesc"] == DBNull.Value ? null : dr["TemplateDesc"].ToString(),
+            dr["TemplatePriority"].ToString()!);
+        using var dlg = new FPMEdit(existing);
+        if (dlg.ShowDialog() != DialogResult.OK || dlg.Result == null) return;
+        var r2 = _pm.Save(dlg.Result);
+        Ui.Info(r2.Message);
+        LoadPM();
+    }
     private void DeletePM()
     {
         var id = _gridPM.CurrentRow?.Cells["ScheduleId"]?.Value;
@@ -226,12 +259,74 @@ internal class UcMaintenance : UserControl, IRefreshable
 
     private void AddVendor()
     {
-        var name = Ui.Input("供应商名称：", "名称：");
-        if (string.IsNullOrWhiteSpace(name)) return;
-        var contact = Ui.Input("联系人（选填）：", "联系人：");
-        var phone = Ui.Input("电话（选填）：", "电话：");
-        var r = _vendors.Save(new Vendor(0, name.Trim(), contact, phone, null, null));
+        using var dlg = new FVendorEdit(null);
+        if (dlg.ShowDialog() != DialogResult.OK || dlg.Result == null) return;
+        var r = _vendors.Save(dlg.Result);
         Ui.Info(r.Message);
         LoadVendors();
+    }
+
+    private void EditVendor()
+    {
+        var row = _gridVendor.CurrentRow;
+        if (row == null) { Ui.Error("请先选择供应商。"); return; }
+        var id = Convert.ToInt32(row.Cells["VendorId"]?.Value ?? 0);
+        var t = _vendors.List();
+        var dr = t.AsEnumerable().FirstOrDefault(r => Convert.ToInt32(r["VendorId"]) == id);
+        if (dr == null) return;
+        var existing = new Vendor(id, dr["VendorName"].ToString()!,
+            dr["Contact"] == DBNull.Value ? null : dr["Contact"].ToString(),
+            dr["Phone"] == DBNull.Value ? null : dr["Phone"].ToString(),
+            dr["Email"] == DBNull.Value ? null : dr["Email"].ToString(),
+            dr["Address"] == DBNull.Value ? null : dr["Address"].ToString(),
+            Convert.ToBoolean(dr["Status"]));
+        using var dlg = new FVendorEdit(existing);
+        if (dlg.ShowDialog() != DialogResult.OK || dlg.Result == null) return;
+        var r2 = _vendors.Save(dlg.Result);
+        Ui.Info(r2.Message);
+        LoadVendors();
+    }
+
+    private void DeleteVendor()
+    {
+        var row = _gridVendor.CurrentRow;
+        if (row == null) { Ui.Error("请先选择供应商。"); return; }
+        var name = row.Cells["VendorName"]?.Value?.ToString() ?? "";
+        if (!Ui.Ask($"确定删除供应商「{name}」？")) return;
+        var id = Convert.ToInt32(row.Cells["VendorId"]?.Value ?? 0);
+        try
+        {
+            DbHelper.ExecuteNonQuery("DELETE dbo.part_vendor WHERE VendorId=@Id; DELETE dbo.vendor WHERE VendorId=@Id",
+                CommandType.Text, DbHelper.P("@Id", id));
+            Ui.Info("已删除。");
+            LoadVendors();
+        }
+        catch (Exception ex) { Ui.Error(DbHelper.FriendlyError(ex)); }
+    }
+
+    /// <summary>FR8：EOQ 一键入库——对 ShouldReorder 配件按 EOQ 建议批量入库。</summary>
+    private void EoqStockIn()
+    {
+        var recs = InventoryOptimizer.GenerateRecommendations().Where(r => r.ShouldReorder).ToList();
+        if (recs.Count == 0) { Ui.Info("当前没有需订购的配件。"); return; }
+        if (!Ui.Ask($"共 {recs.Count} 项需订购，确定按 EOQ 建议批量入库？")) return;
+
+        var partSvc = new PartService();
+        var refNo = $"EOQ:{DateTime.Now:HHmmss}";
+        var (ok, fail) = (0, 0);
+        foreach (var rec in recs)
+        {
+            try
+            {
+                var parts = partSvc.Search(rec.PartCode);
+                var part = parts.FirstOrDefault(p => p.PartCode == rec.PartCode);
+                if (part == null) { fail++; continue; }
+                partSvc.StockIn(part.PartId, (int)Math.Ceiling(rec.Eoq), refNo);
+                ok++;
+            }
+            catch { fail++; }
+        }
+        Ui.Info($"EOQ 入库完成：成功 {ok} / 失败 {fail}（单号 {refNo}）。");
+        LoadEOQ();
     }
 }

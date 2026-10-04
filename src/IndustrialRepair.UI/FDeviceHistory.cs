@@ -57,6 +57,25 @@ internal class FDeviceHistory : UIForm
         grid.DataSource = orders;
 
         var btnClose = Ui.Btn("关闭", 310, 450, 100, 32, (_, _) => Close());
-        Controls.AddRange(new Control[] { lblSummary, grid, btnClose });
+
+        // FR13：停机记录段
+        var downGrid = Ui.Grid(16, 400, 336, 90);
+        var downData = new DowntimeService().History(device.DeviceId);
+        if (downData.Columns.Contains("StartTime")) downData.Columns["StartTime"]!.ColumnName = "开始";
+        if (downData.Columns.Contains("EndTime")) downData.Columns["EndTime"]!.ColumnName = "结束";
+        if (downData.Columns.Contains("DurationMin")) downData.Columns["DurationMin"]!.ColumnName = "时长(分)";
+        if (downData.Columns.Contains("Reason")) downData.Columns["Reason"]!.ColumnName = "原因";
+        downGrid.DataSource = downData;
+        var lblDown = new UILabel
+        { Text = "停机记录", AutoSize = true, Location = new Point(16, 380),
+          Font = new Font("微软雅黑", 9F, FontStyle.Bold) };
+
+        var avail = new DowntimeService().CalculateAvailability(device.DeviceId, 30);
+        var lblAvail = new UILabel
+        { Text = $"近30天可用率：{avail:F1}%", AutoSize = true, Location = new Point(200, 380),
+          Font = new Font("微软雅黑", 9F, FontStyle.Bold),
+          ForeColor = avail > 90 ? Color.FromArgb(80, 160, 90) : avail > 70 ? Color.FromArgb(230, 162, 60) : Color.Firebrick };
+
+        Controls.AddRange(new Control[] { lblSummary, grid, lblDown, lblAvail, downGrid, btnClose });
     }
 }

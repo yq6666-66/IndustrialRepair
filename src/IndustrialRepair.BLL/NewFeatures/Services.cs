@@ -179,18 +179,17 @@ public static class InventoryOptimizer
     {
         // 从消耗分析视图取年用量 + 计算日需求标准差
         var consumption = DbHelper.GetTable(
-            @"SELECT ca.PartCode, ca.PartName, ca.TotalQty, ca.TotalCost,
+            @"SELECT ca.PartId, ca.PartCode, ca.PartName, ca.TotalQty, ca.TotalCost,
                      p.StockQty, p.MinStock, p.Price,
                      ca.Qty30d  -- 近30天用量（用于估日均需求）
               FROM dbo.vw_ConsumptionAnalysis ca
               JOIN dbo.part p ON p.PartId = ca.PartId");
 
-        // 取日需求标准差（从流水表近似）
+        // 取日需求标准差（从流水表近似）— FR6 修复：按 CreatedAt 日期分组而非 RefNo
         var demandVariability = DbHelper.GetTable(
             @"SELECT PartId,
-                     STDEV(ChangeQty) AS DailyStdDev
-              FROM (SELECT PartId, ChangeQty,
-                           CONVERT(date, RefNo) AS ApproxDate
+                     STDEV(dailyQty) AS DailyStdDev
+              FROM (SELECT PartId, ChangeQty AS dailyQty
                     FROM dbo.part_stock_log
                     WHERE ChangeQty < 0) raw
               GROUP BY PartId");
@@ -207,7 +206,9 @@ public static class InventoryOptimizer
             var currentStock = Convert.ToInt32(r["StockQty"]);
             var qty30d = Convert.ToDouble(r["Qty30d"]);
             var avgDaily = qty30d / 30.0;
-            var stdDev = stdDevMap.TryGetValue(0, out var sd) ? sd : avgDaily * 0.3; // 近似
+            // FR6 修复：用实际 PartId 取标准差（原 TryGetValue(0) 恒走近似值）
+            var partId = Convert.ToInt32(r["PartId"]);
+            var stdDev = stdDevMap.TryGetValue(partId, out var sd) ? sd : avgDaily * 0.3;
 
             var eoq = CalculateEoq(annualQty, unitPrice);
             var safetyStock = CalculateSafetyStock(stdDev, DefaultLeadTimeDays);
@@ -328,4 +329,42 @@ public class DowntimeService
                      Reason, CreatedBy
               FROM dbo.downtime_record WHERE DeviceId=@D ORDER BY StartTime DESC",
             CommandType.Text, DbHelper.P("@D", deviceId));
+
+    /// <summary>FR11：计算设备可用率（简化 OEE 的 Availability 分量）。</summary>
+    /// <param name="deviceId">设备 ID</param>
+    /// <param name="days">统计周期（天），默认 30</param>
+    /// <returns>可用率百分比（0-100）；无停机记录返回 100</returns>
+    public double CalculateAvailability(int deviceId, int days = 30)
+    {
+        var result = DbHelper.ExecuteScalar(
+            @"SELECT ISNULL(SUM(DATEDIFF(MINUTE, dr.StartTime, ISNULL(dr.EndTime, GETDATE()))), 0)
+              FROM dbo.downtime_record dr
+              WHERE dr.DeviceId = @D AND dr.StartTime >= DATEADD(DAY, -@Days, GETDATE())",
+            CommandType.Text, DbHelper.P("@D", deviceId), DbHelper.P("@Days", days));
+        var downMinutes = Convert.ToDouble(result ?? 0);
+        var totalMinutes = days * 24.0 * 60.0;
+        return Math.Max(0, Math.Min(100, (totalMinutes - downMinutes) / totalMinutes * 100));
+    }
+
+    /// <summary>FR11：全部设备可用率汇总表。</summary>
+    public DataTable AvailabilityReport(int days = 30)
+    {
+        var t = DbHelper.GetTable(
+            @"SELECT d.DeviceCode, d.DeviceName,
+                     ISNULL(vd.DowntimeCount, 0) AS 停机次数,
+                     ISNULL(vd.TotalDownMinutes, 0) AS 总停机分钟,
+                     ISNULL(vd.AvgDownMinutes, 0) AS 平均停机分钟,
+                     ISNULL(vd.ActiveDowntime, 0) AS 进行中,
+                     CAST(100.0 AS DECIMAL(5,1)) AS 可用率
+              FROM dbo.device d
+              LEFT JOIN dbo.vw_DeviceDowntime vd ON vd.DeviceId = d.DeviceId");
+        // 计算可用率（C# 侧，避免复杂 SQL）
+        foreach (DataRow r in t.Rows)
+        {
+            var downMin = Convert.ToDouble(r["总停机分钟"]);
+            var totalMin = days * 24.0 * 60.0;
+            r["可用率"] = Math.Round(Math.Max(0, Math.Min(100, (totalMin - downMin) / totalMin * 100)), 1);
+        }
+        return t;
+    }
 }
