@@ -104,10 +104,10 @@ def main():
 
     # 3 技术栈与架构
     s = add_slide(prs); header(s, "技术栈与三层架构", ".NET 8 WinForm + SunnyUI + ADO.NET + SQL Server LocalDB")
-    layers = [("UI 层", "WinForm + SunnyUI 3.9.8（UIForm/UIDataGridView/UIBarChart/UILineChart）· 异步照片准备"),
-              ("BLL 层", "认证(bcrypt/MFA) 工单 材料审阅 算料(BomCalculator 纯函数) 识别(IImageRecognizer) 串口(IScannerInput) MQTT"),
-              ("DAL 层", "ADO.NET DbHelper：SqlParameter 全参数化 · RunInTransaction · ScriptRunner 版本化迁移"),
-              ("Models", "实体与代码（MaterialReviewMode / RecognizeSource / Result 模式）")]
+    layers = [("UI 层", "WinForm + SunnyUI 3.9.8（UIForm/UIDataGridView/UIBarChart/UILineChart）· 维护计划中心四Tab · 异步照片准备"),
+              ("BLL 层", "认证(bcrypt/MFA) 工单 材料审阅 算料 识别 串口 MQTT · PM调度(Quartz) EOQ优化 停机OEE 供应商"),
+              ("DAL 层", "ADO.NET DbHelper：SqlParameter 全参数化 · RunInTransaction · ScriptRunner 版本化迁移(Schema v5)"),
+              ("Models", "实体与代码（MaterialReviewMode / InventoryRecommendation / Result 模式）")]
     y = 3.3
     for name, desc in layers:
         box(s, 1.2, y, 5.2, 2.2, fill=PRIMARY)
@@ -118,7 +118,7 @@ def main():
     text(s, 1.2, y + 0.1, 31, 1, "权限双层：界面按钮显隐 + 服务层会话/权限/获派二次校验（越权调用直接拒绝）", size=13, color=GRAY)
 
     # 4 数据库设计
-    s = add_slide(prs); header(s, "数据库：17 表 · 11 过程 · 3 触发器 · 4 视图", "版本化迁移 + 写入约束")
+    s = add_slide(prs); header(s, "数据库：21 表 · 14 过程 · 3 触发器 · 8 视图", "版本化迁移（Schema v5）+ 写入约束")
     bullets(s, 1.2, 3.4, 15.5, [
         "usp_ReviewMaterials：审阅与留痕同事务",
         "usp_GeneratePicking：审阅闸门/快照/★标记/applock 单号",
@@ -130,12 +130,12 @@ def main():
     box(s, 17.6, 3.4, 15.2, 10.4, fill=LIGHT)
     text(s, 18.2, 3.8, 14, 1, "schema_version 版本化迁移", size=15, bold=True, color=PRIMARY)
     text(s, 18.2, 5.0, 14, 8, [
-        "基线 v1 → 材料审阅 v2 → …（每版本单一事务）",
+        "基线 v1 → 材料审阅 v2 → 性能索引 v3 → 新功能 v4 → PM 关联 v5",
         "任一批次失败整体回滚，版本号不落库",
         "重启自动重试；结构校验通过才提交",
         "存储过程/触发器/视图按脚本 SHA-256 增量刷新",
         "",
-        "验收：空库初始化 / 旧库升级（备份恢复演练，13 工单保留）/",
+        "验收：空库初始化 / 旧库增量升级（v4→v5 实测）/",
         "重复启动幂等 / 坏批次整体回滚 全部通过",
     ], size=12)
 
@@ -152,7 +152,7 @@ def main():
 
     # 6 测试与评测
     s = add_slide(prs); header(s, "测试与评测：出真数", "独立测试库强制隔离，不污染业务库")
-    stats = [("单元测试", "32/32"), ("端到端冒烟", "58/58"), ("扫码回环评测", "6/6"), ("SQL 冒烟/升级演练", "SMOKE OK")]
+    stats = [("单元测试", "138/138"), ("端到端冒烟", "82/82"), ("扫码回环评测", "6/6"), ("SQL 冒烟/升级演练", "SMOKE OK")]
     x = 1.2
     for t, v in stats:
         box(s, x, 3.4, 7.6, 3.6, fill=PRIMARY)
@@ -166,11 +166,11 @@ def main():
     ], size=13.5, gap=1.5)
 
     # 7 开源集成与合规
-    s = add_slide(prs); header(s, "开源集成与合规（8 个直接依赖）")
+    s = add_slide(prs); header(s, "开源集成与合规（17 个直接依赖）")
     rows = [("SunnyUI", "界面/图表", "GPL-3.0-only"), ("OpenCvSharp", "视觉特征", "Apache-2.0"),
-            ("QRCoder", "二维码标签", "MIT"), ("ZXing.Net", "条码解码", "Apache-2.0"),
+            ("Microsoft.ML.OnnxRuntime", "课程模型后端", "MIT"), ("ZXing.Net", "条码解码", "Apache-2.0"),
             ("ClosedXML", "Excel 报表", "MIT"), ("MQTTnet 4.3.7", "内嵌 Broker", "MIT"),
-            ("BCrypt.Net-Next", "口令哈希", "MIT"), ("xunit", "单元测试", "Apache-2.0")]
+            ("Quartz.NET 3.13", "定时任务/PM调度", "Apache-2.0"), ("ScottPlot 5", "EOQ 交互图表", "MIT")]
     for i, (n, u, l) in enumerate(rows):
         cx = 1.2 + (i % 2) * 15.9
         cy = 3.4 + (i // 2) * 2.5
@@ -178,16 +178,16 @@ def main():
         text(s, cx + 0.4, cy + 0.28, 6.5, 1.5, n, size=14.5, bold=True)
         text(s, cx + 7.0, cy + 0.34, 4.6, 1.5, u, size=12, color=GRAY)
         text(s, cx + 11.2, cy + 0.28, 3.8, 1.5, l, size=12, color=PRIMARY if "GPL" in l else GRAY, bold="GPL" in l)
-    text(s, 1.2, 13.9, 31, 1, "许可以官方 NuGet 元数据为准；SunnyUI 为 GPL-3.0-only（课设可用，商用发布需注意传染性）", size=12.5, color=GRAY)
+    text(s, 1.2, 13.9, 31, 1, "另含 MailKit/QuestPDF/CsvHelper/Serilog/Polly/FluentValidation/FuzzySharp/Bogus/QRCoder/BCrypt.Net-Next；许可以官方 NuGet 元数据为准，SunnyUI 为 GPL-3.0-only（课设可用，商用需注意传染性）", size=11.5, color=GRAY)
 
     # 8 集成亮点
-    s = add_slide(prs); header(s, "物联网与集成亮点")
+    s = add_slide(prs); header(s, "维护智能化与集成亮点")
     bullets(s, 1.2, 3.6, 31.5, [
-        "串口扫码：IScannerInput 统一接口——真实串口/模拟器/图片扫码/手动录入同一「编码→配件」流程，帧协议 PART:编码",
-        "MQTT 遥测：MQTTnet 内嵌 Broker(127.0.0.1:18835)，factory/{id}/telemetry 温度/振动上屏",
-        "越限自动报修：温度>75℃ 或振动>8.0 自动建 [IoT自动报修] 工单，10 分钟冷却防重复（冒烟确定性断言）",
-        "二维码闭环：QRCoder 生成 PART:编码 标签 → 报修照片/图片扫码经 ZXing 直达配件（扫码回环 6/6）",
-        "大屏与报表：UIBarChart/UILineChart + 低库存预警表；CSV(UTF-8 BOM) 导出对接山海鲸类外部大屏；Excel 报表",
+        "预防性维护 PM：Time/Meter 双模式调度，Quartz 每 30 分钟检查到期自动建工单，工单↔调度硬外键关联（Schema v5）",
+        "EOQ 库存优化：经济批量/再订购点/安全库存，首选供应商实际交期参与计算（无关联回退 14 天），ScottPlot 图表导出 PNG",
+        "停机追踪 OEE：固定七类停机原因下拉，30 天可用率（Availability）计算与 Excel 导出",
+        "MQTT 遥测：内嵌 Broker(127.0.0.1:18835)，温度/振动越限自动建 [IoT自动报修] 工单（10 分钟冷却，冒烟确定性断言）",
+        "二维码闭环：QRCoder 生成 PART:编码 标签 → ZXing 解码直达配件（回环 6/6）；CSV/Excel 导出对接外部大屏",
     ], size=14, gap=1.9)
 
     # 9 边界与展望

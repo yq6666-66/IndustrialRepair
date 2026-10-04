@@ -15,6 +15,7 @@
     <None Include="..\..\db\04_material_review_migration.sql" Link="db\04_material_review_migration.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\db\05_performance_indexes.sql" Link="db\05_performance_indexes.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\db\06_new_features.sql" Link="db\06_new_features.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\db\07_pm_order_link.sql" Link="db\07_pm_order_link.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <PropertyGroup>
