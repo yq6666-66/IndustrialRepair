@@ -342,7 +342,14 @@ public class DowntimeService
               WHERE dr.DeviceId = @D AND dr.StartTime >= DATEADD(DAY, -@Days, GETDATE())",
             CommandType.Text, DbHelper.P("@D", deviceId), DbHelper.P("@Days", days));
         var downMinutes = Convert.ToDouble(result ?? 0);
+        return ComputeAvailability(downMinutes, days);
+    }
+
+    /// <summary>VR8：可用率纯函数（停机分钟 → 0-100 百分比，含边界裁剪），供单测。</summary>
+    public static double ComputeAvailability(double downMinutes, int days)
+    {
         var totalMinutes = days * 24.0 * 60.0;
+        if (totalMinutes <= 0) return 100;
         return Math.Max(0, Math.Min(100, (totalMinutes - downMinutes) / totalMinutes * 100));
     }
 
@@ -360,11 +367,7 @@ public class DowntimeService
               LEFT JOIN dbo.vw_DeviceDowntime vd ON vd.DeviceId = d.DeviceId");
         // 计算可用率（C# 侧，避免复杂 SQL）
         foreach (DataRow r in t.Rows)
-        {
-            var downMin = Convert.ToDouble(r["总停机分钟"]);
-            var totalMin = days * 24.0 * 60.0;
-            r["可用率"] = Math.Round(Math.Max(0, Math.Min(100, (totalMin - downMin) / totalMin * 100)), 1);
-        }
+            r["可用率"] = Math.Round(ComputeAvailability(Convert.ToDouble(r["总停机分钟"]), days), 1);
         return t;
     }
 }

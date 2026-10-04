@@ -58,8 +58,22 @@ internal class UcMaintenance : UserControl, IRefreshable
         { Text = "EOQ 经济批量 + 再订购点 + 安全库存", AutoSize = true,
           Location = new Point(10, 10), Font = new Font("微软雅黑", 9F), ForeColor = Color.FromArgb(90, 100, 115) };
         var btnStockIn = Ui.Btn("按建议入库", 320, 4, 100, 30, (_, _) => EoqStockIn());
+        var btnExportChart = Ui.Btn("导出图表", 430, 4, 90, 30, (_, _) =>
+        {
+            try
+            {
+                var dir = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "IndustrialRepair", "exports");
+                System.IO.Directory.CreateDirectory(dir);
+                var file = System.IO.Path.Combine(dir, $"EOQ分析_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+                _plot.Plot.SavePng(file, 1200, 600);
+                Ui.Info("图表已导出：" + file);
+            }
+            catch (Exception ex) { Ui.Error("导出失败：" + ex.Message); }
+        });
         eToolbar.Controls.Add(lblE);
         eToolbar.Controls.Add(btnStockIn);
+        eToolbar.Controls.Add(btnExportChart);
         var eoqSplit = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 350 };
         eoqSplit.Panel1.Controls.Add(_gridEOQ);
         eoqSplit.Panel2.Controls.Add(_plot);   // ScottPlot 交互图表
@@ -72,6 +86,7 @@ internal class UcMaintenance : UserControl, IRefreshable
         vToolbar.Controls.Add(Ui.Btn("新增", 10, 4, 70, 30, (_, _) => AddVendor()));
         vToolbar.Controls.Add(Ui.Btn("编辑", 88, 4, 70, 30, (_, _) => EditVendor()));
         vToolbar.Controls.Add(Ui.Btn("删除", 166, 4, 70, 30, (_, _) => DeleteVendor()));
+        vToolbar.Controls.Add(Ui.Btn("关联配件", 244, 4, 90, 30, (_, _) => ManagePartVendor()));
         tabVendor.Controls.Add(_gridVendor);
         tabVendor.Controls.Add(vToolbar);
 
@@ -302,6 +317,46 @@ internal class UcMaintenance : UserControl, IRefreshable
             LoadVendors();
         }
         catch (Exception ex) { Ui.Error(DbHelper.FriendlyError(ex)); }
+    }
+
+    /// <summary>VR9：配件-供应商关联管理（选中供应商→搜索配件→设供货价/交期/首选）。</summary>
+    private void ManagePartVendor()
+    {
+        var row = _gridVendor.CurrentRow;
+        if (row == null) { Ui.Error("请先选择供应商。"); return; }
+        var vendorId = Convert.ToInt32(row.Cells["VendorId"]?.Value ?? 0);
+        var vendorName = row.Cells["VendorName"]?.Value?.ToString() ?? "";
+
+        while (true)
+        {
+            var partCode = Ui.Input($"供应商「{vendorName}」关联配件\n输入配件编码（留空退出）：", "编码：");
+            if (string.IsNullOrWhiteSpace(partCode)) return;
+
+            var part = new PartService().Search(partCode.Trim()).FirstOrDefault();
+            if (part == null) { Ui.Error("未找到该配件。"); continue; }
+
+            var priceStr = Ui.Input($"「{part.PartName}」供货价（元）：", "价格：", part.Price.ToString("F2"));
+            if (!decimal.TryParse(priceStr, out var price) || price < 0) { Ui.Error("价格无效。"); continue; }
+            var leadStr = Ui.Input("交期（天，默认 7）：", "交期：", "7");
+            int.TryParse(leadStr, out var leadTime);
+            var preferred = Ui.Ask("设为首选供应商？");
+
+            try
+            {
+                DbHelper.ExecuteNonQuery(
+                    @"MERGE dbo.part_vendor AS target
+                      USING (SELECT @P AS PartId, @V AS VendorId) AS src
+                      ON target.PartId = src.PartId AND target.VendorId = src.VendorId
+                      WHEN MATCHED THEN UPDATE SET SupplyPrice=@S, LeadTimeDays=@L, IsPreferred=@F
+                      WHEN NOT MATCHED THEN INSERT(PartId, VendorId, SupplyPrice, LeadTimeDays, IsPreferred)
+                      VALUES(@P, @V, @S, @L, @F);",
+                    CommandType.Text,
+                    DbHelper.P("@P", part.PartId), DbHelper.P("@V", vendorId),
+                    DbHelper.P("@S", price), DbHelper.P("@L", Math.Max(1, leadTime)), DbHelper.P("@F", preferred));
+                Ui.Info($"已关联：{part.PartCode} → {vendorName}（{price:F2}元 / {leadTime}天{(preferred ? " / 首选" : "")}）");
+            }
+            catch (Exception ex) { Ui.Error(DbHelper.FriendlyError(ex)); }
+        }
     }
 
     /// <summary>FR8：EOQ 一键入库——对 ShouldReorder 配件按 EOQ 建议批量入库。</summary>

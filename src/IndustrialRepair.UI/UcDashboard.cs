@@ -58,7 +58,7 @@ internal class UcDashboard : UserControl, IRefreshable
         top.Controls.Add(btnFull);
 
         _autoTimer.Interval = 30_000;
-        _autoTimer.Tick += (_, _) => SafeRefresh();
+        _autoTimer.Tick += (_, _) => SafeRefreshAsync();
         Disposed += (_, _) => { _autoTimer.Stop(); _autoTimer.Dispose(); };
 
         // F11 切换全屏（OR4）
@@ -131,6 +131,39 @@ internal class UcDashboard : UserControl, IRefreshable
         else RefreshData();
     }
 
+    /// <summary>
+    /// VR4：定时自动刷新走后台取数——远程 SQL Server 场景下 30 秒一次的查询
+    /// 不再阻塞 UI 线程；取数完成后再回 UI 线程绘制。导航/F5 仍走同步 RefreshData
+    /// （列宽恢复依赖 DataSource 同步就位）。
+    /// </summary>
+    private void SafeRefreshAsync()
+    {
+        if (IsDisposed || !IsHandleCreated) return;
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            (int today, int pending, int working, int done, decimal cost, decimal stockValue) summary;
+            List<DashboardRow> rows;
+            System.Data.DataTable low;
+            try
+            {
+                summary = _svc.Summary();
+                rows = _svc.Rows();
+                low = new PartService().LowStock();
+            }
+            catch (Exception ex)
+            {
+                BeginInvoke(() => Ui.Error("大屏数据加载失败：" + DAL.DbHelper.FriendlyError(ex)));
+                return;
+            }
+            BeginInvoke(() =>
+            {
+                if (IsDisposed) return;
+                try { ApplyData(summary, rows, low); }
+                catch (Exception ex) { Ui.Error("大屏数据渲染失败：" + ex.Message); }
+            });
+        });
+    }
+
     /// <summary>全屏切换（OR4：大屏页独占显示器，再按 F11/按钮恢复）。</summary>
     private void ToggleFullscreen()
     {
@@ -158,57 +191,65 @@ internal class UcDashboard : UserControl, IRefreshable
     {
         try
         {
-            var (today, pending, working, done, cost, stockValue) = _svc.Summary();
-            string[] vals = { today.ToString(), pending.ToString(), working.ToString(), done.ToString(), cost.ToString("N2"), stockValue.ToString("N2") };
-            for (int i = 0; i < 6; i++)
-                _cards[i].Text = $"{_cards[i].Text.Split('\n')[0]}\n{vals[i]}";
-
+            var summary = _svc.Summary();
             var rows = _svc.Rows();
-
-            var status = rows.Where(r => r.Kind == "状态分布").ToList();
-            if (status.Count > 0)
-                _barStatus.ShowData(
-                    status.Select(r => OrderStatusCode.ToChinese(r.Label)).ToArray(),
-                    status.Select(r => (double)r.Val).ToArray(), "工单状态分布");
-
-            // 近 7 日双系列：报修工单数（左轴）+ 出库成本（右轴，R3）
-            var trend = rows.Where(r => r.Kind == "近7日工单").OrderBy(r => r.Label).ToList();
-            var costTrend = rows.Where(r => r.Kind == "近7日成本")
-                                .OrderBy(r => r.Label).ToDictionary(r => r.Label, r => r.Val);
-            if (trend.Count > 0)
-            {
-                var option = new UILineOption();
-                var series = option.AddSeries("报修工单数", false);
-                var costSeries = option.AddSeries("出库成本(元)", true);
-                foreach (var r in trend)
-                {
-                    var label = r.Label.Length > 5 ? r.Label[5..] : r.Label;
-                    series.Add(label, r.Val);
-                    costSeries.Add(label, costTrend.TryGetValue(r.Label, out var c) ? c : 0);
-                }
-                _lineTrend.SetOption(option);
-                _lineTrend.Refresh();
-            }
-
-            var rank = rows.Where(r => r.Kind == "工程师完工").OrderByDescending(r => r.Val).ToList();
-            if (rank.Count > 0)
-                _barEngineer.ShowData(
-                    rank.Select(r => r.Label).ToArray(),
-                    rank.Select(r => (double)r.Val).ToArray(), "工程师完工排行");
-
-            var low = new BLL.PartService().LowStock();
-            low.Columns["Gap"]!.ColumnName = "缺口";
-            foreach (var col in new[] { "PartCode", "PartName", "Spec", "Unit", "StockQty", "MinStock", "CategoryName" })
-                if (low.Columns.Contains(col)) low.Columns[col]!.ColumnName = col switch
-                {
-                    "PartCode" => "编码", "PartName" => "名称", "Spec" => "规格", "Unit" => "单位",
-                    "StockQty" => "当前库存", "MinStock" => "下限", _ => "类别"
-                };
-            _gridLow.DataSource = low;
+            var low = new PartService().LowStock();
+            ApplyData(summary, rows, low);
         }
         catch (Exception ex)
         {
             Ui.Error("大屏数据加载失败：" + DAL.DbHelper.FriendlyError(ex));
         }
+    }
+
+    /// <summary>VR4：绘制阶段（必须在 UI 线程调用）——同步与后台两条取数路径共用。</summary>
+    private void ApplyData(
+        (int today, int pending, int working, int done, decimal cost, decimal stockValue) summary,
+        List<DashboardRow> rows,
+        System.Data.DataTable low)
+    {
+        string[] vals = { summary.today.ToString(), summary.pending.ToString(), summary.working.ToString(), summary.done.ToString(), summary.cost.ToString("N2"), summary.stockValue.ToString("N2") };
+        for (int i = 0; i < 6; i++)
+            _cards[i].Text = $"{_cards[i].Text.Split('\n')[0]}\n{vals[i]}";
+
+        var status = rows.Where(r => r.Kind == "状态分布").ToList();
+        if (status.Count > 0)
+            _barStatus.ShowData(
+                status.Select(r => OrderStatusCode.ToChinese(r.Label)).ToArray(),
+                status.Select(r => (double)r.Val).ToArray(), "工单状态分布");
+
+        // 近 7 日双系列：报修工单数（左轴）+ 出库成本（右轴，R3）
+        var trend = rows.Where(r => r.Kind == "近7日工单").OrderBy(r => r.Label).ToList();
+        var costTrend = rows.Where(r => r.Kind == "近7日成本")
+                            .OrderBy(r => r.Label).ToDictionary(r => r.Label, r => r.Val);
+        if (trend.Count > 0)
+        {
+            var option = new UILineOption();
+            var series = option.AddSeries("报修工单数", false);
+            var costSeries = option.AddSeries("出库成本(元)", true);
+            foreach (var r in trend)
+            {
+                var label = r.Label.Length > 5 ? r.Label[5..] : r.Label;
+                series.Add(label, r.Val);
+                costSeries.Add(label, costTrend.TryGetValue(r.Label, out var c) ? c : 0);
+            }
+            _lineTrend.SetOption(option);
+            _lineTrend.Refresh();
+        }
+
+        var rank = rows.Where(r => r.Kind == "工程师完工").OrderByDescending(r => r.Val).ToList();
+        if (rank.Count > 0)
+            _barEngineer.ShowData(
+                rank.Select(r => r.Label).ToArray(),
+                rank.Select(r => (double)r.Val).ToArray(), "工程师完工排行");
+
+        low.Columns["Gap"]!.ColumnName = "缺口";
+        foreach (var col in new[] { "PartCode", "PartName", "Spec", "Unit", "StockQty", "MinStock", "CategoryName" })
+            if (low.Columns.Contains(col)) low.Columns[col]!.ColumnName = col switch
+            {
+                "PartCode" => "编码", "PartName" => "名称", "Spec" => "规格", "Unit" => "单位",
+                "StockQty" => "当前库存", "MinStock" => "下限", _ => "类别"
+            };
+        _gridLow.DataSource = low;
     }
 }
