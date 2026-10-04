@@ -161,6 +161,63 @@ public static class PdfService
         });
     }
 
+    /// <summary>批量配件二维码标签 PDF（R6：A4 排版，每行 3 列×5 行 = 15 张/页）。</summary>
+    public static string ExportPartsLabelPdf(System.Data.DataTable parts)
+    {
+        return Write($"配件标签批量_{DateTime.Now:yyyyMMdd_HHmmss}", doc =>
+        {
+            doc.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(15);
+                page.DefaultTextStyle(t => t.FontFamily("微软雅黑").FontSize(8.5f));
+
+                page.Header().AlignCenter()
+                    .Text($"配件二维码标签（共 {parts.Rows.Count} 张）· 打印时间 {DateTime.Now:yyyy-MM-dd HH:mm}")
+                    .FontSize(10).SemiBold().FontColor("#296CCA");
+
+                page.Content().PaddingVertical(8).Column(col =>
+                {
+                    var i = 0;
+                    while (i < parts.Rows.Count)
+                    {
+                        var row = parts.Rows[i];
+                        var remaining = parts.Rows.Count - i;
+                        var cols = Math.Min(3, remaining);
+
+                        col.Item().Row(r =>
+                        {
+                            for (int j = 0; j < cols; j++)
+                            {
+                                var p = parts.Rows[i + j];
+                                var code = p["PartCode"].ToString()!;
+                                var name = p["PartName"].ToString()!;
+
+                                r.RelativeItem().Border(0.5f).Padding(6).Column(label =>
+                                {
+                                    label.Item().AlignCenter().Height(80)
+                                        .Image(BuildQr($"PART:{code}"));
+                                    label.Item().PaddingTop(4).AlignCenter()
+                                        .Text($"{code}").FontSize(9).Bold();
+                                    label.Item().AlignCenter()
+                                        .Text($"{name}").FontSize(8);
+                                });
+                            }
+                            // 填充空列保持行宽一致
+                            for (int j = cols; j < 3; j++) r.RelativeItem().Border(0.5f);
+                        });
+                        col.Item().Height(8);   // 行间距
+                        i += cols;
+                    }
+                });
+
+                page.Footer().AlignRight()
+                    .Text($"A4 纵向 · 3×5 标签/页 · 建议使用标签纸打印")
+                    .FontSize(8);
+            });
+        });
+    }
+
     /// <summary>生成二维码 PNG 字节（复用 QRCoder）。</summary>
     private static byte[] BuildQr(string content)
     {

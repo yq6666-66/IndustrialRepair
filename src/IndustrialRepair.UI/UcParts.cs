@@ -84,12 +84,24 @@ internal class UcParts : UserControl, IRefreshable
             catch (Exception ex) { Ui.Error("PDF 导出失败：" + ex.Message); }
         });
         var btnImport = Ui.Btn("批量导入", 610, 46, 90, 32, OnBatchImport);
+        var btnLabels = Ui.Btn("批量打印标签", 710, 46, 105, 32, (_, _) =>
+        {
+            try
+            {
+                if (!_listMode || _grid.DataSource is not System.Data.DataTable t || t.Rows.Count == 0)
+                { Ui.Error("请先查询要打印标签的配件列表。"); return; }
+                var view = t.Copy();
+                view.Columns.Remove("PartId");
+                Ui.Info("标签 PDF 已生成：" + BLL.PdfService.ExportPartsLabelPdf(view));
+            }
+            catch (Exception ex) { Ui.Error("标签生成失败：" + ex.Message); }
+        });
 
         var toolbar = new Panel { Dock = DockStyle.Top, Height = 84 };
         toolbar.Controls.AddRange(new Control[]
         {
             Ui.Lbl("关键字：", 4, 14, 80), _txtKey, Ui.Lbl("类别：", 346, 14, 48), _cmbCat,
-            btnQuery, btnAdd, btnEdit, btnDel, btnIn, btnLow, btnLog, btnQr, btnXls, btnPdf, btnImport
+            btnQuery, btnAdd, btnEdit, btnDel, btnIn, btnLow, btnLog, btnQr, btnXls, btnPdf, btnImport, btnLabels
         });
 
         // Dock 布局（同 FMain 模式）：填充控件先加，标题条最后加；分页条在工具栏之下

@@ -258,8 +258,30 @@ internal class FReportDialog : UIForm
         _user = user;
         Text = "新建报修工单";
         Ui.CloseOnEsc(this);
-        ClientSize = new Size(730, 330);
+        ClientSize = new Size(730, 360);
         StartPosition = FormStartPosition.CenterParent;
+
+        // R8：快速报修模板（选中预填类型/优先级/描述）
+        var cmbTemplate = new UIComboBox
+        { Location = new Point(90, 96), Size = new Size(130, 30), DropDownStyle = UIDropDownStyle.DropDownList };
+        cmbTemplate.Items.AddRange(new object[] { "—— 模板 ——", "轴承异响", "液压渗油", "电气跳闸", "皮带跑偏", "润滑不足" });
+        cmbTemplate.SelectedIndex = 0;
+        cmbTemplate.SelectedIndexChanged += (_, _) =>
+        {
+            var (type, prio, desc) = cmbTemplate.SelectedIndex switch
+            {
+                1 => ("机械", "紧急", "主轴运转异响，温度偏高，需检查轴承"),
+                2 => ("液压", "严重", "液压站压力波动，油缸渗油，需更换密封件"),
+                3 => ("电气", "紧急", "电柜接触器频繁跳闸，需检查电路"),
+                4 => ("机械", "一般", "输送带跑偏，托辊异响，需调整张紧装置"),
+                5 => ("机械", "一般", "导轨润滑不足，运行阻力增大，需补充润滑脂"),
+                _ => ("", "", "")
+            };
+            if (cmbTemplate.SelectedIndex == 0) return;
+            if (!string.IsNullOrEmpty(type)) _cmbType.Text = type;
+            if (!string.IsNullOrEmpty(prio)) _cmbPriority.Text = prio;
+            if (!string.IsNullOrEmpty(desc)) _txtDesc.Text = desc;
+        };
 
         foreach (var d in _svc.Devices()) _cmbDevice.Items.Add($"{d.DeviceCode} {d.DeviceName}");
         if (_cmbDevice.Items.Count > 0) _cmbDevice.SelectedIndex = 0;
@@ -276,14 +298,18 @@ internal class FReportDialog : UIForm
             _photo.Image = null;
             _lblRecog.Text = "拍照识别：等待图片…";
         });
-        btnOk = Ui.Btn("提交报修", 90, 270, 140, 36, OnSubmit);
-        var btnBack = Ui.Btn("取消", 250, 270, 140, 36, (_, _) => Close());
+        btnOk = Ui.Btn("提交报修", 90, 300, 140, 36, OnSubmit);
+        var btnBack = Ui.Btn("取消", 250, 300, 140, 36, (_, _) => Close());
+        _txtDesc.Location = new Point(90, 130);   // R8：给模板行让位
+        btnPhoto.Location = new Point(410, 262);
+        btnClear.Location = new Point(560, 262);
 
         Controls.AddRange(new Control[]
         {
             Ui.Lbl("设备：", 6, 22, 80), _cmbDevice,
             Ui.Lbl("类型：", 6, 60, 80), _cmbType, _cmbPriority,
-            Ui.Lbl("描述：", 6, 100, 80), _txtDesc,
+            Ui.Lbl("模板：", 6, 96, 80), cmbTemplate,
+            Ui.Lbl("描述：", 6, 134, 80), _txtDesc,
             _photo, _lblRecog, btnPhoto, btnClear, btnOk, btnBack
         });
     }
