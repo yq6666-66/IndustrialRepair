@@ -443,5 +443,33 @@ catch (Exception ex)
     Check("MQTT 内嵌Broker遥测接收", false, ex.InnerException?.Message ?? ex.Message);
 }
 
+Console.WriteLine("\n== 11. 新功能验证（R41-R45）==");
+
+// 11.1 PM 调度：创建立即到期的调度 → CheckAndGenerate → 验证自动建单
+var pmSvc = new MaintenanceScheduleService();
+var pmSave = pmSvc.Save(new MaintenanceSchedule(0, devices[0].DeviceId, devices[0].DeviceName,
+    "冒烟PM测试", "Time", 1, null, null, DateTime.Now.AddMinutes(-1), true, "冒烟自动生成", PriorityCode.Normal));
+Check("PM调度保存", pmSave.Success, pmSave.Message);
+var pmCreated = pmSvc.CheckAndGenerate();
+Check("PM到期自动建单(R41)", pmCreated.Count >= 1, $"生成 {pmCreated.Count} 张：{string.Join(",", pmCreated.Take(3))}");
+
+// 11.2 EOQ：计算建议
+var recs = InventoryOptimizer.GenerateRecommendations();
+Check("EOQ建议生成(R44)", recs.Count > 0, $"共 {recs.Count} 条");
+if (recs.Count > 0)
+{
+    Check("EOQ批量合理(R44)", recs[0].Eoq > 0 && recs[0].ReorderPoint > 0,
+        $"EOQ={recs[0].Eoq:F0} ROP={recs[0].ReorderPoint:F0} SS={recs[0].SafetyStock:F0}");
+}
+
+// 11.3 停机追踪：开始→结束→验证记录
+var downSvc = new DowntimeService();
+var downStart = downSvc.Start(devices[0].DeviceId, "冒烟停机测试", "smoke");
+Check("停机开始(R45)", downStart.Success, downStart.Message);
+var downStop = downSvc.Stop(devices[0].DeviceId);
+Check("停机结束(R45)", downStop.Success, downStop.Message);
+var downSummary = downSvc.DeviceDowntime();
+Check("停机汇总非空(R45)", downSummary.Rows.Count > 0, $"共 {downSummary.Rows.Count} 台设备");
+
 Console.WriteLine($"\n结果：{pass} 通过 / {fail} 失败");
 return fail == 0 ? 0 : 1;

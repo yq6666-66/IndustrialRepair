@@ -47,19 +47,21 @@ public class MaintenanceScheduleService
                   USING (SELECT @Id AS ScheduleId) AS src
                   ON target.ScheduleId = src.ScheduleId
                   WHEN MATCHED THEN UPDATE SET
-                      DeviceId=@Dev, Title=@T, IntervalType=@IT, IntervalDays=@ID,
+                      DeviceId=@Dev, Title=@T, IntervalType=@IT, IntervalDays=@ITV,
                       IntervalHours=@IH, IsActive=@A, TemplateDesc=@TD, TemplatePriority=@TP,
                       NextDueAt = CASE WHEN @NDA IS NOT NULL THEN @NDA
-                                       WHEN @IT = N'Time' THEN DATEADD(DAY, ISNULL(@ID, 30), GETDATE())
+                                       WHEN @IT = N'Time' THEN DATEADD(DAY, ISNULL(@ITV, 30), GETDATE())
                                        ELSE NULL END
                   WHEN NOT MATCHED THEN INSERT(DeviceId, Title, IntervalType, IntervalDays, IntervalHours,
                       IsActive, TemplateDesc, TemplatePriority, NextDueAt)
-                  VALUES(@Dev, @T, @IT, @ID, @IH, @A, @TD, @TP,
-                      CASE WHEN @IT = N'Time' THEN DATEADD(DAY, ISNULL(@ID, 30), GETDATE()) ELSE NULL END);",
+                  VALUES(@Dev, @T, @IT, @ITV, @IH, @A, @TD, @TP,
+                      CASE WHEN @NDA IS NOT NULL THEN @NDA
+                           WHEN @IT = N'Time' THEN DATEADD(DAY, ISNULL(@ITV, 30), GETDATE())
+                           ELSE NULL END);",
                 CommandType.Text,
                 DbHelper.P("@Id", s.ScheduleId), DbHelper.P("@Dev", s.DeviceId),
                 DbHelper.P("@T", s.Title), DbHelper.P("@IT", s.IntervalType),
-                DbHelper.P("@ID", (object?)s.IntervalDays ?? DBNull.Value),
+                DbHelper.P("@ITV", (object?)s.IntervalDays ?? DBNull.Value),
                 DbHelper.P("@IH", (object?)s.IntervalHours ?? DBNull.Value),
                 DbHelper.P("@A", s.IsActive), DbHelper.P("@TD", (object?)s.TemplateDesc ?? DBNull.Value),
                 DbHelper.P("@TP", s.TemplatePriority),

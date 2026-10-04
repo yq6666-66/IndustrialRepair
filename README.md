@@ -12,9 +12,12 @@
 | SunnyUI | NuGet 3.9.8：UIForm / UIButton / UITextBox / UIComboBox / UIDataGridView / UIBarChart / UILineChart |
 | ADO.NET | SqlConnection / SqlCommand / SqlDataAdapter / DataSet / BeginTransaction-Commit-Rollback / SqlException |
 | SQL Server | LocalDB，9 张存储过程、3 个触发器、4 个视图、参数化查询防注入 |
-| 安全 | bcrypt 口令哈希、SHA-256 摘要、RBAC 四角色、图形验证码、多因素认证、登录锁定、会话超时 |
-| 物联网 | SerialPort 串口 + 扫码模拟器；**MQTTnet 内嵌 Broker 遥测 + 超阈值自动报修（UcIoT 页）** |
-| AI 辅助 | ChatGPT 等 AI 工具辅助编码（任务书允许）；拍照识别 V2 = ZXing 二维码直达 + OpenCvSharp（CLAHE/轮廓圆度）×特征库融合 |
+| 安全 | bcrypt 口令哈希、SHA-256 摘要、RBAC 四角色、图形验证码、多因素认证、登录锁定、会话超时、FluentValidation 集中校验 |
+| 物联网 | SerialPort 串口 + 扫码模拟器；**MQTTnet 内嵌 Broker 遥测 + 超阈值自动报修**；**设备停机追踪**（开始/结束+汇总视图） |
+| AI 辅助 | ChatGPT 等 AI 工具辅助编码（任务书允许）；拍照识别 V2 = ZXing 二维码直达 + OpenCvSharp（CLAHE/轮廓圆度）×特征库融合；**ONNX Runtime 课程模型后端**（配置就绪自动启用） |
+| **预防性维护** | **maintenance_schedule 调度表（Time/Meter 双触发）→ Quartz 每 30 分钟自动检查到期 → 自动生成工单 + 通知** |
+| **库存优化** | **EOQ 经济批量 √(2DS/H) + 再订购点 + 安全库存（纯 C# 算法，基于消耗历史自动计算）** |
+| **供应商** | **vendor + part_vendor（供货价/交期/首选标记）** |
 
 ### 直接使用的热门开源项目（许可证以官方 NuGet 元数据为准，详见 docs/GitHub开源参考.md）
 

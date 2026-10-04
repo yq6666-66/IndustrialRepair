@@ -21,6 +21,7 @@
 | 13 | **Microsoft.ML.OnnxRuntime** | [dotnet/onnxruntime](https://github.com/dotnet/onnxruntime) | ~5k★ | MIT | 1.23.x | ONNX 推理后端（NR8）：课程模型预留接入位——配置 Onnx 节即自动启用，未配置回退特征库 |
 | 14 | **Bogus** | [bchavez/Bogus](https://github.com/bchavez/Bogus) | ~5k★ | MIT | 35.x | 压测数据生成（NR9）：故障描述组合生成（部位×症状×备注），固定种子可复现 |
 | 15 | **FuzzySharp** | [JakeBayer/FuzzySharp](https://github.com/JakeBayer/FuzzySharp) | ~1.5k★ | MIT | 1.x | 配件模糊搜索（NR10）：Levenshtein 编辑距离，精确无命中自动回退（PartialRatio 中文子串匹配） |
+| 16 | **ScottPlot 5** | [ScottPlot/ScottPlot](https://github.com/ScottPlot/ScottPlot) | ~5k★ | MIT | 5.x | 交互式科学图表（R44）：EOQ 年消耗量柱状图，支持缩放/平移/大数据量渲染 |
 | 5 | **ClosedXML** | [ClosedXML/ClosedXML](https://github.com/ClosedXML/ClosedXML) | ~4.6k★ | MIT | 最新 | 领料清单/维修报表/配件库存导出 .xlsx（标题、表头样式、冻结行、自适应列宽、合计行） |
 | 6 | **MQTTnet** | [dotnet/MQTTnet](https://github.com/dotnet/MQTTnet) | ~4k★（.NET 基金会） | MIT | 4.3.7.1207 | IoT 网关：应用内嵌 MqttServer(127.0.0.1:18835) + 设备遥测模拟发布/订阅 + 超阈值自动报修工单 |
 | 7 | **BCrypt.Net-Next** | [BcryptNet/bcrypt.net](https://github.com/BcryptNet/bcrypt.net) | ~1k★ | MIT | 4.2.0 | 口令 bcrypt 哈希（cost=11） |
