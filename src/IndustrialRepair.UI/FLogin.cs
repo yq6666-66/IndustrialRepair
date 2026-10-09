@@ -1,6 +1,5 @@
 using System;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using IndustrialRepair.BLL;
 using IndustrialRepair.Models;
@@ -9,21 +8,23 @@ using Sunny.UI;
 namespace IndustrialRepair.UI;
 
 /// <summary>
-/// 登录窗体：图形验证码 → 口令（bcrypt 校验）→ 可选多因素认证 → 进入系统。
-/// 含注册、找回密码、一键初始化数据库。左侧品牌区 + 右侧卡片式表单。
-/// 布局原则：文本标签一律 AutoSize / 大余量容器，固定像素盒会裁切 CJK 文字。
+/// 登录窗体：借鉴 SunnyUI UILoginForm（内置插画 + 卡片式表单 + OnLogin 契约），
+/// 图形验证码 → 口令（bcrypt 校验）→ 可选多因素认证 → 进入系统。
+/// 含注册、找回密码、一键初始化数据库。
+/// 依赖契约（探针核实 3.9.8）：OnLogin 为 bool(string,string)，返回 true 表示成功；
+/// edtUser/edtPassword/btnLogin 为 private 不可重排，只能通过 UserName/Password 属性读写、
+/// 在 protected uiPanel1 下半部追加自有控件。
 /// </summary>
-public class FLogin : UIForm
+public class FLogin : UILoginForm
 {
-    private readonly UITextBox _txtUser;
-    private readonly UITextBox _txtPwd;
     private readonly UITextBox _txtCaptcha;
-    private readonly PictureBox _picCaptcha = new() { Cursor = Cursors.Hand, Size = new Size(128, 34) };
+    private readonly PictureBox _picCaptcha = new() { Cursor = Cursors.Hand, Size = new Size(68, 29) };
     private readonly UILabel _lblHint = new()
     {
-        AutoSize = false, Dock = DockStyle.Fill, BackColor = Color.White,
-        ForeColor = Color.Firebrick, TextAlign = ContentAlignment.MiddleCenter,
-        Font = new Font("微软雅黑", 8.5F), Visible = false
+        AutoSize = false, Location = new Point(4, 276), Size = new Size(182, 26),
+        BackColor = Color.White, ForeColor = Color.Firebrick,
+        TextAlign = ContentAlignment.MiddleLeft,
+        Font = new Font("微软雅黑", 7.5F), Visible = false
     };
 
     private readonly AuthService _auth = new();
@@ -34,136 +35,61 @@ public class FLogin : UIForm
     public FLogin()
     {
         Text = "登录";
-        ClientSize = new Size(940, 600);
         StartPosition = FormStartPosition.CenterScreen;
         MaximizeBox = false;
-        FormBorderStyle = FormBorderStyle.FixedSingle;
-        BackColor = Color.FromArgb(240, 243, 248);
 
-        // ---- 左侧品牌区：渐变绘成 BackgroundImage，让透明子控件正确透出 ----
-        var brand = new Panel
+        // ---- UILoginForm 内置要素：左侧插画 + 右侧卡片 ----
+        Title = "工业维修智能化零件分配平台";
+        SubText = "v1.6 · 拍照 · 识别 · 智能算料";
+        LoginImage = UILoginImage.Login1;
+        UserNameWatermark = "用户名 / 工号";
+        PasswordWatermark = "密码";
+        ButtonLoginText = "登  录";
+        ButtonCancelText = "退  出";
+        LoginText = "账号登录";
+
+        // 卡片加高（原 245）：验证码行 / 提示行 / 演示账号追加在原按钮（相对 y206..235）之下
+        ClientSize = new Size(750, 578);
+        uiPanel1.Height = 348;
+
+        _txtCaptcha = Ui.Txt("验证码", 4, 242, 110);
+        _picCaptcha.Location = new Point(118, 242);
+        var demo = new UILabel
         {
-            Dock = DockStyle.Left, Width = 360,
-            BackgroundImage = BrandImage(360, 600), BackgroundImageLayout = ImageLayout.Stretch
+            Text = "演示：admin / warehouse /\nengineer / reporter · 123456",
+            AutoSize = false, Location = new Point(4, 306), Size = new Size(182, 36),
+            BackColor = Color.White, ForeColor = Color.FromArgb(130, 140, 155),
+            Font = new Font("微软雅黑", 7.5F), TextAlign = ContentAlignment.TopCenter
         };
+        uiPanel1.Controls.Add(_txtCaptcha);
+        uiPanel1.Controls.Add(_picCaptcha);
+        uiPanel1.Controls.Add(_lblHint);
+        uiPanel1.Controls.Add(demo);
 
-        var flow = new FlowLayoutPanel
+        // ---- 窗体底部一行：注册 / 找回 / 初始化 ----
+        var bottom = new FlowLayoutPanel
         {
-            Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false,
-            BackColor = Color.Transparent, Padding = new Padding(34, 60, 12, 0), AutoScroll = false
+            Location = new Point(213, 522), Size = new Size(324, 40),
+            FlowDirection = FlowDirection.LeftToRight, WrapContents = false, BackColor = Color.Transparent
         };
-
-        UILabel BrandLabel(string text, float size, Color color, bool bold = false, int topGap = 0) => new()
-        {
-            Text = text, AutoSize = true, BackColor = Color.Transparent, ForeColor = color,
-            Font = new Font("微软雅黑", size, bold ? FontStyle.Bold : FontStyle.Regular),
-            Margin = new Padding(0, topGap, 0, 0)
-        };
-
-        flow.Controls.Add(BrandLabel("工业维修", 26F, Color.White, bold: true));
-        flow.Controls.Add(BrandLabel("智能化零件分配平台", 17F, Color.White, bold: true, topGap: 6));
-        flow.Controls.Add(BrandLabel("拍照 · 识别 · 智能算料一体化维修系统", 9.5F, Color.FromArgb(178, 205, 240), topGap: 8));
-        flow.Controls.Add(BrandLabel("●  拍照识别：OpenCV + ZXing 双引擎", 9.5F, Color.FromArgb(226, 236, 250), topGap: 86));
-        flow.Controls.Add(BrandLabel("●  BOM 智能算料 · 冗余系数可调", 9.5F, Color.FromArgb(226, 236, 250), topGap: 18));
-        flow.Controls.Add(BrandLabel("●  MQTT 设备遥测 · 越限自动报修", 9.5F, Color.FromArgb(226, 236, 250), topGap: 18));
-        flow.Controls.Add(BrandLabel("●  RBAC 权限 · bcrypt · 全程留痕", 9.5F, Color.FromArgb(226, 236, 250), topGap: 18));
-
-        var brandBottom = new Panel
-        {
-            Dock = DockStyle.Bottom, AutoSize = true, BackColor = Color.Transparent,
-            Padding = new Padding(34, 8, 12, 14)
-        };
-        brandBottom.Controls.Add(BrandLabel("v1.0 · WinForm + ADO.NET + SQL Server", 8.5F, Color.FromArgb(148, 178, 216)));
-
-        brand.Controls.Add(flow);
-        brand.Controls.Add(brandBottom);
-
-        // ---- 右侧登录卡片：单列表格布局，行高随内容自适应 ----
-        var card = new UIPanel
-        {
-            Location = new Point(396, 80), Size = new Size(516, 442),
-            FillColor = Color.White, Radius = 12, RectColor = Color.FromArgb(226, 232, 240)
-        };
-        var tlp = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 12,
-            BackColor = Color.White, Padding = new Padding(28, 24, 28, 14)
-        };
-        tlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (int i = 0; i < 12; i++)
-            tlp.RowStyles.Add(i == 2 || i == 5 ? new RowStyle(SizeType.Absolute, 10)
-                          : i == 9 ? new RowStyle(SizeType.Percent, 100)
-                          : i == 11 ? new RowStyle(SizeType.Absolute, 26)
-                          : new RowStyle(SizeType.AutoSize));
-
-        UILabel CellLabel(string text, float size, Color color, bool bold = false, int bottom = 0) => new()
-        {
-            Text = text, AutoSize = true, BackColor = Color.White, ForeColor = color,
-            Font = new Font("微软雅黑", size, bold ? FontStyle.Bold : FontStyle.Regular),
-            Margin = new Padding(0, 0, 0, bottom)
-        };
-
-        _txtUser = Ui.Txt("用户名 / 工号", 0, 0, 300);
-        _txtPwd = Ui.Txt("密码", 0, 0, 300, password: true);
-        _txtCaptcha = Ui.Txt("验证码", 0, 0, 210);
-
-        var captchaRow = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill, AutoSize = true, WrapContents = false,
-            FlowDirection = FlowDirection.LeftToRight, BackColor = Color.White, Margin = new Padding(0)
-        };
-        _txtCaptcha.Margin = new Padding(0, 0, 10, 0);
-        _picCaptcha.Margin = new Padding(0);
-        captchaRow.Controls.Add(_txtCaptcha);
-        captchaRow.Controls.Add(_picCaptcha);
-
-        var btnLogin = new UIButton
-        {
-            Text = "登  录", Dock = DockStyle.Fill, Size = new Size(300, 46),
-            FillColor = Color.FromArgb(41, 108, 202), RectColor = Color.FromArgb(41, 108, 202),
-            ForeColor = Color.White, Font = new Font("微软雅黑", 11F, FontStyle.Bold),
-            Cursor = Cursors.Hand, Margin = new Padding(0, 10, 0, 4)
-        };
-        btnLogin.Click += OnLogin;
-
-        var btnReg = Ui.Btn("注册账号", 0, 0, 108, 30, (_, _) => new FRegister().ShowDialog());
-        var btnFind = Ui.Btn("找回密码", 0, 0, 108, 30, (_, _) => new FFindBack().ShowDialog());
-        var btnInit = Ui.Btn("一键初始化", 0, 0, 116, 30, OnInitDb);
+        var btnReg = Ui.Btn("注册账号", 0, 0, 100, 32, (_, _) => new FRegister().ShowDialog());
+        var btnFind = Ui.Btn("找回密码", 0, 0, 100, 32, (_, _) => new FFindBack().ShowDialog());
+        var btnInit = Ui.Btn("一键初始化", 0, 0, 100, 32, OnInitDb);
         btnReg.Margin = new Padding(0, 4, 12, 0);
         btnFind.Margin = new Padding(0, 4, 12, 0);
         btnInit.Margin = new Padding(0, 4, 0, 0);
-        var btnRow = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill, AutoSize = true, WrapContents = false,
-            FlowDirection = FlowDirection.LeftToRight, BackColor = Color.White, Margin = new Padding(0)
-        };
-        btnRow.Controls.AddRange(new Control[] { btnReg, btnFind, btnInit });
+        bottom.Controls.AddRange(new Control[] { btnReg, btnFind, btnInit });
+        Controls.Add(bottom);
 
-        var demo = new UILabel
-        {
-            Text = "演示账号：admin / warehouse / engineer / reporter · 密码 123456",
-            Dock = DockStyle.Fill, AutoSize = false, BackColor = Color.White,
-            ForeColor = Color.FromArgb(130, 140, 155), Font = new Font("微软雅黑", 8.5F),
-            TextAlign = ContentAlignment.MiddleCenter, Margin = new Padding(0)
-        };
-
-        tlp.Controls.Add(CellLabel("欢迎登录", 15F, Color.FromArgb(32, 41, 56), bold: true, bottom: 2), 0, 0);
-        tlp.Controls.Add(CellLabel("请输入账号信息进入系统", 9F, Color.Gray), 0, 1);
-        tlp.Controls.Add(_txtUser, 0, 3);
-        tlp.Controls.Add(_txtPwd, 0, 4);
-        tlp.Controls.Add(captchaRow, 0, 6);
-        tlp.Controls.Add(btnLogin, 0, 7);
-        tlp.Controls.Add(_lblHint, 0, 8);
-        tlp.Controls.Add(btnRow, 0, 10);   // 第 9 行为弹性留白
-        tlp.Controls.Add(demo, 0, 11);
-
-        card.Controls.Add(tlp);
-
+        // ---- 登录契约：返回 true = 成功（自设 DialogResult 并关闭，不依赖框架行为）----
+        OnLogin += TryLogin;
         _picCaptcha.Click += (_, _) => NewCaptcha();
-        Controls.Add(card);
-        Controls.Add(brand);
         KeyPreview = true;
-        KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) OnLogin(null, EventArgs.Empty); };
+        KeyDown += (_, e) =>
+        {
+            if (e.KeyCode == Keys.Enter && ActiveControl is not UIButton)
+                TryLogin(UserName, Password);
+        };
         NewCaptcha();
         LoadLastUser();   // R4：记住上次登录用户名（仅用户名，不含任何口令）
     }
@@ -180,7 +106,7 @@ public class FLogin : UIForm
             if (!File.Exists(PrefFile)) return;
             using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(PrefFile));
             if (doc.RootElement.TryGetProperty("lastUser", out var u))
-                _txtUser.Text = u.GetString() ?? "";
+                UserName = u.GetString() ?? "";
         }
         catch { /* 偏好读取失败忽略 */ }
     }
@@ -213,28 +139,6 @@ public class FLogin : UIForm
         _lblHint.Visible = true;
     }
 
-    /// <summary>品牌区背景：渐变 + 装饰圆（一次绘成位图，透明子控件可正确透出）。</summary>
-    private static Bitmap BrandImage(int w, int h)
-    {
-        var bmp = new Bitmap(w, h);
-        using var g = Graphics.FromImage(bmp);
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        using (var brush = new LinearGradientBrush(new Rectangle(0, 0, w, h),
-            Color.FromArgb(22, 66, 134), Color.FromArgb(45, 116, 214), 90f))
-            g.FillRectangle(brush, 0, 0, w, h);
-        using (var pen = new Pen(Color.FromArgb(38, 255, 255, 255), 2f))
-        {
-            g.DrawEllipse(pen, -70, h - 260, 230, 230);
-            g.DrawEllipse(pen, 246, 36, 170, 170);
-        }
-        using (var brush = new SolidBrush(Color.FromArgb(26, 255, 255, 255)))
-        {
-            g.FillEllipse(brush, 282, h - 112, 92, 92);
-            g.FillEllipse(brush, -34, 56, 124, 124);
-        }
-        return bmp;
-    }
-
     private void OnInitDb(object? s, EventArgs e)
     {
         _lblHint.Visible = false;
@@ -253,17 +157,18 @@ public class FLogin : UIForm
 
         var bmp = new Bitmap(_picCaptcha.Width, _picCaptcha.Height);
         using var g = Graphics.FromImage(bmp);
-        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         g.Clear(Color.FromArgb(240, 244, 248));
-        for (int i = 0; i < 6; i++)
-            using (var pen = new Pen(Color.FromArgb(rnd.Next(120, 220), rnd.Next(120, 220), rnd.Next(120, 220)), 1.2f))
+        for (int i = 0; i < 5; i++)
+            using (var pen = new Pen(Color.FromArgb(rnd.Next(120, 220), rnd.Next(120, 220), rnd.Next(120, 220)), 1.1f))
                 g.DrawLine(pen, rnd.Next(bmp.Width), rnd.Next(bmp.Height), rnd.Next(bmp.Width), rnd.Next(bmp.Height));
-        for (int i = 0; i < 80; i++)
+        for (int i = 0; i < 60; i++)
             bmp.SetPixel(rnd.Next(bmp.Width), rnd.Next(bmp.Height), Color.FromArgb(rnd.Next(256), rnd.Next(256), rnd.Next(256)));
+        // 68×29 小图：字号与步进按新尺寸收紧
         for (int i = 0; i < 4; i++)
         {
-            float x = 12 + i * 28 + rnd.Next(-3, 3), y = 5 + rnd.Next(-3, 3);
-            using var font = new Font("Arial", 15 + rnd.Next(3), FontStyle.Bold);
+            float x = 7 + i * 15 + rnd.Next(-2, 2), y = 4 + rnd.Next(-2, 2);
+            using var font = new Font("Arial", 12 + rnd.Next(2), FontStyle.Bold);
             using var brush = new SolidBrush(Color.FromArgb(rnd.Next(0, 120), rnd.Next(0, 120), rnd.Next(0, 160)));
             g.TranslateTransform(x, y);
             g.RotateTransform(rnd.Next(-14, 14));
@@ -276,18 +181,19 @@ public class FLogin : UIForm
         _txtCaptcha.Text = "";
     }
 
-    private void OnLogin(object? s, EventArgs e)
+    /// <summary>UILoginForm 登录契约：返回 true = 登录成功（验证码 → bcrypt → 可选 MFA）。</summary>
+    private bool TryLogin(string userName, string password)
     {
         if (string.IsNullOrWhiteSpace(_txtCaptcha.Text) ||
             !string.Equals(_txtCaptcha.Text.Trim(), _captcha, StringComparison.OrdinalIgnoreCase))
         {
             ShowHint("图形验证码不正确（点击图片可刷新）。");
             NewCaptcha();
-            return;
+            return false;
         }
         NewCaptcha();   // R5：验证码一次性——通过校验即作废，重试必须使用新码
 
-        var result = _auth.Login(_txtUser.Text.Trim(), _txtPwd.Text, ClientIp());
+        var result = _auth.Login(userName.Trim(), password, ClientIp());
         if (!result.Success)
         {
             if (result.Message.StartsWith("MFA_REQUIRED|"))
@@ -298,16 +204,17 @@ public class FLogin : UIForm
                     ? $"多因素认证：验证码已发送至 {parts[2]}，请查收邮件。"
                     : $"多因素认证：验证码已发送至 {parts[2]}\n（演示环境验证码：{parts[1]}）";
                 var code = Ui.Input(hint, "验证码：");
-                if (string.IsNullOrWhiteSpace(code)) { ShowHint("已取消二次验证。"); NewCaptcha(); return; }
-                result = _auth.VerifyMfa(_txtUser.Text.Trim(), code);
+                if (string.IsNullOrWhiteSpace(code)) { ShowHint("已取消二次验证。"); NewCaptcha(); return false; }
+                result = _auth.VerifyMfa(userName.Trim(), code);
             }
-            if (!result.Success) { ShowHint(result.Message); NewCaptcha(); return; }
+            if (!result.Success) { ShowHint(result.Message); NewCaptcha(); return false; }
         }
 
         LoggedUser = result.Data;
-        SaveLastUser(_txtUser.Text.Trim());
+        SaveLastUser(userName.Trim());
         DialogResult = DialogResult.OK;
         Close();
+        return true;
     }
 }
 
