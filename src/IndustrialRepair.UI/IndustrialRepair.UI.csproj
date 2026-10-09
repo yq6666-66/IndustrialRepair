@@ -24,6 +24,10 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- 全部界面按 96DPI 固定坐标设计（SunnyUI/UILoginForm 亦然），高缩放屏
+         由系统整窗等比拉伸（DpiUnawareGdiScaled 文字更清晰）。
+         默认 SystemAware 会让字体随 DPI 放大而盒子不变 → 150% 屏文字溢出重叠 -->
+    <ApplicationHighDpiMode>DpiUnawareGdiScaled</ApplicationHighDpiMode>
   </PropertyGroup>
 
 </Project>
