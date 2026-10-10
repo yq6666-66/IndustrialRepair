@@ -5,13 +5,15 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
+# 首个项目 = 唯一可执行项目：VS 无 .suo 启动设置时默认以第一个项目为启动项，
+# 故 IndustrialRepair.UI 必须列在所有类库之前（否则新机器打开默认启动类库报错）。
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IndustrialRepair.UI", "src\IndustrialRepair.UI\IndustrialRepair.UI.csproj", "{F530BE51-85BD-460C-ABAD-B5A5827C8BD6}"
+EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IndustrialRepair.Models", "src\IndustrialRepair.Models\IndustrialRepair.Models.csproj", "{7738C1D7-DAA3-41CC-8851-F694DE5A3B23}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IndustrialRepair.DAL", "src\IndustrialRepair.DAL\IndustrialRepair.DAL.csproj", "{39C274BD-FBA6-458A-89F7-613CDE2AC25D}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IndustrialRepair.BLL", "src\IndustrialRepair.BLL\IndustrialRepair.BLL.csproj", "{053F570D-4DD8-4487-8DA9-0A4D9D331EE1}"
-EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IndustrialRepair.UI", "src\IndustrialRepair.UI\IndustrialRepair.UI.csproj", "{F530BE51-85BD-460C-ABAD-B5A5827C8BD6}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject
