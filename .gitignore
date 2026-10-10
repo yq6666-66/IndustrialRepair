@@ -27,3 +27,4 @@ docs/exports/
 publish_candidate/
 models/*.onnx
 models/imagenet_parts*.txt
+docs/_schema/

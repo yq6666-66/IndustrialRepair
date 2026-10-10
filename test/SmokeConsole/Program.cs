@@ -3,7 +3,7 @@
 // 或设置环境变量 INDUSTRIALREPAIR_TEST_CONN。测试会建号/建单/扣库存——只允许在独立测试库运行。
 using System;
 using System.Data;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using IndustrialRepair.BLL;
 using IndustrialRepair.DAL;
 using IndustrialRepair.Models;

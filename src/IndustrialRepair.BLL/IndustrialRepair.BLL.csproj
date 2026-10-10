@@ -4,6 +4,17 @@
     <ProjectReference Include="..\IndustrialRepair.DAL\IndustrialRepair.DAL.csproj" />
   </ItemGroup>
 
+  <!-- 迁移脚本嵌入程序集：DbInitializer 优先读嵌入资源，发布包缺 db 目录也能建库
+       （LogicalName 显式固定，规避 SDK 对 ..\ 外链文件自动命名的下划线转义）。 -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\db\01_init.sql" LogicalName="db.01_init.sql" />
+    <EmbeddedResource Include="..\..\db\02_procs.sql" LogicalName="db.02_procs.sql" />
+    <EmbeddedResource Include="..\..\db\04_material_review_migration.sql" LogicalName="db.04_material_review_migration.sql" />
+    <EmbeddedResource Include="..\..\db\05_performance_indexes.sql" LogicalName="db.05_performance_indexes.sql" />
+    <EmbeddedResource Include="..\..\db\06_new_features.sql" LogicalName="db.06_new_features.sql" />
+    <EmbeddedResource Include="..\..\db\07_pm_order_link.sql" LogicalName="db.07_pm_order_link.sql" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <PackageReference Include="Bogus" Version="35.6.5" />
@@ -33,7 +44,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <!-- 任务书指定经典 ADO.NET（SqlException 等），屏蔽 System.Data.SqlClient 过时提示 -->
+    <!-- System.Drawing.Common 10.x 在 net8.0 上的过时提示（仅面向 Windows 桌面场景，按需屏蔽） -->
     <NoWarn>$(NoWarn);CS0618</NoWarn>
   </PropertyGroup>
 

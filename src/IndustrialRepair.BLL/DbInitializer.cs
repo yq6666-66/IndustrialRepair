@@ -1,5 +1,5 @@
 using System;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -36,6 +36,26 @@ public class DbInitializer
         };
         foreach (var p in candidates) if (File.Exists(p)) return p;
         return "";
+    }
+
+    /// <summary>
+    /// 读取迁移脚本内容：嵌入资源优先（csproj EmbeddedResource，LogicalName=db.文件名），
+    /// 未命中回退文件系统（开发时直改 db 脚本立即生效；--diag-script 场景不受影响）。
+    /// 根除"发布包漏带 db 目录导致启动即 FileNotFoundException"一类问题。
+    /// </summary>
+    private static string ReadScript(string file)
+    {
+        var asm = typeof(DbInitializer).Assembly;
+        using var stream = asm.GetManifestResourceStream($"db.{file}");
+        if (stream != null)
+        {
+            using var reader = new StreamReader(stream, System.Text.Encoding.UTF8);
+            return reader.ReadToEnd();
+        }
+        var path = FindScript(file);
+        if (path.Length == 0)
+            throw new FileNotFoundException($"未找到 db/{file}（嵌入资源与 db 目录均缺失）。");
+        return File.ReadAllText(path);
     }
 
     /// <summary>结构就绪（含版本与关键列校验），供启动检查使用</summary>
@@ -135,10 +155,7 @@ CREATE TABLE dbo.schema_version(
                     $"数据库结构版本({current})高于程序支持版本({SchemaVersion})，请升级程序。");
 
             // 3) 过程/触发器/视图：按文件哈希增量刷新
-            var procsPath = FindScript("02_procs.sql");
-            if (procsPath.Length == 0)
-                throw new FileNotFoundException("未找到 db/02_procs.sql（发布包需包含 db 目录）。");
-            var procsText = File.ReadAllText(procsPath);
+            var procsText = ReadScript("02_procs.sql");
             var hash = Sha256(procsText);
             var stored = ExecScalar(conn, tran,
                 "SELECT CONVERT(NVARCHAR(100), value) FROM fn_listextendedproperty(N'procs_sha256', NULL, NULL, NULL, NULL, NULL, NULL)") as string;
@@ -214,11 +231,9 @@ SELECT
 
     private static void RunManaged(SqlConnection conn, SqlTransaction tran, string file, string desc)
     {
-        var path = FindScript(file);
-        if (path.Length == 0)
-            throw new FileNotFoundException($"未找到 db/{file}（发布包需包含 db 目录）。");
+        var text = ReadScript(file);
         FileLog.Write($"应用数据库迁移：{file}（{desc}）");
-        ScriptRunner.RunText(ScriptRunner.PrepareManagedScript(File.ReadAllText(path)), conn, tran);
+        ScriptRunner.RunText(ScriptRunner.PrepareManagedScript(text), conn, tran);
     }
 
     private static void InsertVersion(SqlConnection conn, SqlTransaction tran, int version, string desc) =>
