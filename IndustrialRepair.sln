@@ -5,27 +5,27 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IndustrialRepair.Models", "src\IndustrialRepair.Models\IndustrialRepair.Models.csproj", "{7738C1D7-DAA3-41CC-8851-F694DE5A3B23}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IndustrialRepair.Models", "src\IndustrialRepair.Models\IndustrialRepair.Models.csproj", "{7738C1D7-DAA3-41CC-8851-F694DE5A3B23}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IndustrialRepair.DAL", "src\IndustrialRepair.DAL\IndustrialRepair.DAL.csproj", "{39C274BD-FBA6-458A-89F7-613CDE2AC25D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IndustrialRepair.DAL", "src\IndustrialRepair.DAL\IndustrialRepair.DAL.csproj", "{39C274BD-FBA6-458A-89F7-613CDE2AC25D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IndustrialRepair.BLL", "src\IndustrialRepair.BLL\IndustrialRepair.BLL.csproj", "{053F570D-4DD8-4487-8DA9-0A4D9D331EE1}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IndustrialRepair.BLL", "src\IndustrialRepair.BLL\IndustrialRepair.BLL.csproj", "{053F570D-4DD8-4487-8DA9-0A4D9D331EE1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IndustrialRepair.UI", "src\IndustrialRepair.UI\IndustrialRepair.UI.csproj", "{F530BE51-85BD-460C-ABAD-B5A5827C8BD6}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IndustrialRepair.UI", "src\IndustrialRepair.UI\IndustrialRepair.UI.csproj", "{F530BE51-85BD-460C-ABAD-B5A5827C8BD6}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IndustrialRepair.Tests", "tests\IndustrialRepair.Tests\IndustrialRepair.Tests.csproj", "{B76C08FB-3CAA-4DF7-AC28-790536D10D9A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IndustrialRepair.Tests", "tests\IndustrialRepair.Tests\IndustrialRepair.Tests.csproj", "{B76C08FB-3CAA-4DF7-AC28-790536D10D9A}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{0C88DD14-F956-CE84-757C-A364CCF449FC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RecognizeEval", "test\RecognizeEval\RecognizeEval.csproj", "{F3C57566-CFD5-47B7-9812-44F91BBCCAFF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RecognizeEval", "test\RecognizeEval\RecognizeEval.csproj", "{F3C57566-CFD5-47B7-9812-44F91BBCCAFF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmokeConsole", "test\SmokeConsole\SmokeConsole.csproj", "{4CD00964-AA8D-4701-AB4B-0BBD896CB672}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SmokeConsole", "test\SmokeConsole\SmokeConsole.csproj", "{4CD00964-AA8D-4701-AB4B-0BBD896CB672}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SeedDemoData", "test\SeedDemoData\SeedDemoData.csproj", "{91E67574-76F4-4C8E-A8A8-A4CA0550DB77}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SeedDemoData", "test\SeedDemoData\SeedDemoData.csproj", "{91E67574-76F4-4C8E-A8A8-A4CA0550DB77}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OnnxTest", "test\OnnxTest\OnnxTest.csproj", "{16FE31CB-148A-4F5D-BCCC-7155D5941D9D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OnnxTest", "test\OnnxTest\OnnxTest.csproj", "{16FE31CB-148A-4F5D-BCCC-7155D5941D9D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
