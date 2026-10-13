@@ -169,7 +169,7 @@ internal class UcUsers : UserControl, IRefreshable
         {
             Text = $"备份目录：{BackupService.BackupDir}（恢复前建议先做一次新备份）",
             AutoSize = true, Location = new Point(420, 18), Font = new Font("微软雅黑", 8.5F),
-            ForeColor = Color.FromArgb(110, 122, 138)
+            ForeColor = Theme.Current.TextSecondary
         };
 
         tab.Padding = new Padding(10, 54, 10, 10);

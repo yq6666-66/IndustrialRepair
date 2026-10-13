@@ -48,7 +48,7 @@ internal class FStockAdjust : UIForm
         {
             Text = "在「实盘数量」列输入实际清点数，差异自动计算。确认后正差异入库、负差异调减。",
             AutoSize = true, Location = new Point(10, 440), Font = new Font("微软雅黑", 8.5F),
-            ForeColor = Color.FromArgb(110, 122, 138)
+            ForeColor = Theme.Current.TextSecondary
         };
 
         var btnConfirm = Ui.Btn("确认调整", 200, 460, 110, 32, OnConfirm);

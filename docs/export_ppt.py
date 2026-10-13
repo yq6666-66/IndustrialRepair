@@ -12,7 +12,7 @@ from pptx.util import Pt, Cm
 ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "答辩_工业维修智能化零件分配平台.pptx"
 
-PRIMARY = RGBColor(0x2A, 0x6C, 0xCA)
+PRIMARY = RGBColor(0x18, 0x70, 0xF0)   # 对齐应用内电光蓝 Accent(24,112,240)
 DARK = RGBColor(0x20, 0x29, 0x38)
 GRAY = RGBColor(0x6E, 0x7A, 0x8A)
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
@@ -152,7 +152,7 @@ def main():
 
     # 6 测试与评测
     s = add_slide(prs); header(s, "测试与评测：出真数", "独立测试库强制隔离，不污染业务库")
-    stats = [("单元测试", "138/138"), ("端到端冒烟", "82/82"), ("扫码回环评测", "6/6"), ("SQL 冒烟/升级演练", "SMOKE OK")]
+    stats = [("单元测试", "169/169"), ("端到端冒烟", "85/85"), ("扫码回环评测", "6/6"), ("SQL 冒烟/升级演练", "SMOKE OK")]
     x = 1.2
     for t, v in stats:
         box(s, x, 3.4, 7.6, 3.6, fill=PRIMARY)
