@@ -26,7 +26,7 @@ internal class UcPicking : UserControl, IRefreshable
     private readonly UILabel _lblEmptyMain = new()
     {
         Dock = DockStyle.Top, Height = 26, Text = "未查询到领料单", TextAlign = ContentAlignment.MiddleCenter,
-        ForeColor = Color.FromArgb(140, 150, 165), Font = new Font("微软雅黑", 9.5F), BackColor = Color.White, Visible = false
+        ForeColor = Theme.Current.TextSecondary, Font = new Font("微软雅黑", 9.5F), BackColor = Theme.Current.CardBg, Visible = false
     };
 
     private static UIDataGridView FillGrid()
@@ -38,7 +38,7 @@ internal class UcPicking : UserControl, IRefreshable
     private readonly UILabel _lblSummary = new()
     {
         Dock = DockStyle.Bottom, Height = 26,
-        Font = new Font("微软雅黑", 9.5F, FontStyle.Bold), ForeColor = Color.FromArgb(0, 122, 204), Text = ""
+        Font = new Font("微软雅黑", 9.5F, FontStyle.Bold), ForeColor = Theme.Current.Accent, Text = ""
     };
 
     public UcPicking(UserInfo user)
@@ -61,17 +61,17 @@ internal class UcPicking : UserControl, IRefreshable
         var lblHint = new UILabel
         {
             Text = "整机 BOM 配料：确认零件仅标记重点（★），BOM 外补充件按人工用量追加；工单需先在详情页完成材料审阅。",
-            Location = new Point(680, 16), Size = new Size(470, 34), AutoSize = false,
-            Font = new Font("微软雅黑", 8F), ForeColor = Color.FromArgb(110, 122, 138), TextAlign = ContentAlignment.MiddleLeft
+            Size = new Size(470, 34), AutoSize = false, Margin = new Padding(8, 6, 0, 0),
+            Font = new Font("微软雅黑", 8F), ForeColor = Theme.Current.TextSecondary, TextAlign = ContentAlignment.MiddleLeft
         };
 
         btnGen.Visible = _user.HasPerm("picking.generate");
         btnIssue.Visible = _user.HasPerm("picking.issue");
 
-        var toolbar = new Panel { Dock = DockStyle.Top, Height = 54 };
+        var toolbar = Ui.Toolbar();
         toolbar.Controls.AddRange(new Control[]
         {
-            Ui.Lbl("状态：", 10, 14, 76), _cmbStatus, btnQuery, btnGen, btnIssue, btnExport, btnPdf, lblHint
+            Ui.Lbl("状态：", 0, 0, 76), _cmbStatus, btnQuery, btnGen, btnIssue, btnExport, btnPdf, lblHint
         });
 
         // 上：领料单列表；下：明细 + 汇总（水平 SplitContainer 消除锚点互挤）
@@ -88,7 +88,7 @@ internal class UcPicking : UserControl, IRefreshable
         bottom.Controls.Add(lblItems);
 
         var split = new SplitContainer
-        { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 320, FixedPanel = FixedPanel.None };
+        { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 320, Panel1MinSize = 160, Panel2MinSize = 160 };
         split.Panel1.Controls.Add(top);
         split.Panel2.Controls.Add(bottom);
 

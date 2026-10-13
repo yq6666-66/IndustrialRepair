@@ -362,6 +362,8 @@ public class FMain : UIForm
                 _ => new UcDashboard()
             };
             page.Dock = DockStyle.Fill;
+            page.BackColor = Theme.Current.PageBg;
+            Ui.ApplyPageTheme(page);
             _pages[key] = page;
         }
         _content.Controls.Clear();

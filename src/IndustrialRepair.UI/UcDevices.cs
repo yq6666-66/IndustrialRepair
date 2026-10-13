@@ -254,11 +254,11 @@ internal class UcReport : UserControl, IRefreshable
         _cmbRange.DropDownStyle = UIDropDownStyle.DropDownList;
         _cmbRange.SelectedIndexChanged += (_, _) => RefreshData();
 
-        var toolbar = new Panel { Dock = DockStyle.Top, Height = 46 };
+        var toolbar = Ui.Toolbar();
         var lbl = new UILabel
         {
             Text = "多维度维修报表", AutoSize = true,
-            Location = new Point(10, 12), Font = new Font("微软雅黑", 9F), ForeColor = Color.FromArgb(90, 100, 115)
+            Location = new Point(10, 12), Font = new Font("微软雅黑", 9F), ForeColor = Theme.Current.LabelColor
         };
         var lblRange = new UILabel { Text = "范围：", AutoSize = true, Location = new Point(310, 13), Font = new Font("微软雅黑", 9F) };
         toolbar.Controls.AddRange(new Control[] { lbl, lblRange, _cmbRange, btn, btnXls });

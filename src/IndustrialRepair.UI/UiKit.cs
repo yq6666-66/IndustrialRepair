@@ -95,6 +95,13 @@ internal static class Ui
         l.ForeColor = Theme.Current.LabelColor;
     }
 
+    /// <summary>工具栏：流式布局，窗口变窄时自动换行，避免固定坐标的按钮溢出或互相覆盖。</summary>
+    public static FlowLayoutPanel Toolbar() => new()
+    {
+        Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        WrapContents = true, Padding = new Padding(10, 8, 10, 6), BackColor = Theme.Current.PageBg
+    };
+
     public static UIComboBox Combo(int x, int y, int w = 160)
     {
         var c = new UIComboBox { Location = new Point(x, y), Size = new Size(w, 30), DropDownStyle = UIDropDownStyle.DropDownList };
@@ -133,6 +140,116 @@ internal static class Ui
         f.ControlBoxForeColor = t.TextPrimary;
         f.ControlBoxFillHoverColor = t.NavActive;
         f.ControlBoxCloseFillHoverColor = t.Danger;
+        f.Shown += (_, _) => ApplyPageTheme(f);
+    }
+
+    /// <summary>
+    /// 深色主题兜底：遍历页面/对话框控件树，把仍是 SunnyUI 默认或浅色的外观换成主题色。
+    /// 显式设置的语义色（如红色超期字、绿色达标字）保持不变。
+    /// </summary>
+    public static void ApplyPageTheme(Control root)
+    {
+        var t = Theme.Current;
+        foreach (var c in Descendants(root))
+        {
+            switch (c)
+            {
+                case UITextBox tb when !tb.StyleCustomMode:
+                    StyleText(tb);
+                    break;
+                case UIComboBox cmb when !cmb.StyleCustomMode:
+                    StyleCombo(cmb);
+                    break;
+                case UIPanel p:
+                    p.StyleCustomMode = true;
+                    p.FillColor = t.CardBg;
+                    p.RectColor = t.Border;
+                    break;
+                case UILabel l:
+                    FixText(l, t.LabelColor);
+                    FixSurface(l);
+                    break;
+                case Label l:
+                    FixText(l, t.LabelColor);
+                    FixSurface(l);
+                    break;
+                case UICheckBox cb:
+                    FixText(cb, t.LabelColor);
+                    break;
+                case UIButton b when !b.StyleCustomMode:
+                    StyleButton(b);
+                    break;
+                case UIDataGridView g when !g.StyleCustomMode:
+                    ApplyGridTheme(g);
+                    break;
+                case TabControl tc:
+                    StyleTabs(tc);
+                    break;
+                case TextBoxBase tx when IsLight(tx.BackColor):
+                    tx.BackColor = t.InputBg;
+                    tx.ForeColor = t.TextPrimary;
+                    break;
+                case Panel pn when IsLight(pn.BackColor):
+                    pn.BackColor = t.CardBg;
+                    break;
+            }
+        }
+    }
+
+    private static IEnumerable<Control> Descendants(Control root)
+    {
+        foreach (Control c in root.Controls)
+        {
+            yield return c;
+            foreach (var d in Descendants(c)) yield return d;
+        }
+    }
+
+    private static bool IsLight(Color c) => c.A == 255 && (c.R + c.G + c.B) / 3 > 200;
+
+    private static bool IsNeutral(Color c) => Math.Max(c.R, Math.Max(c.G, c.B)) - Math.Min(c.R, Math.Min(c.G, c.B)) <= 30;
+
+    private static void FixText(Control c, Color replacement)
+    {
+        var f = c.ForeColor;
+        if (IsNeutral(f) && (f.R + f.G + f.B) / 3 < 150) c.ForeColor = replacement;
+    }
+
+    private static void FixSurface(Control c)
+    {
+        if (IsLight(c.BackColor)) c.BackColor = Color.Transparent;
+    }
+
+    private static readonly ConditionalWeakTable<TabControl, object> _tabsThemed = new();
+
+    /// <summary>页签主题：深色底、选中页电光蓝下划线，页面底与主题一致。</summary>
+    public static void StyleTabs(TabControl tc)
+    {
+        var t = Theme.Current;
+        tc.BackColor = t.PageBg;
+        tc.ForeColor = t.TextPrimary;
+        foreach (TabPage p in tc.TabPages)
+        {
+            p.BackColor = t.PageBg;
+            p.ForeColor = t.TextPrimary;
+        }
+        if (_tabsThemed.TryGetValue(tc, out _)) return;
+        _tabsThemed.Add(tc, new object());
+        tc.DrawMode = TabDrawMode.OwnerDrawFixed;
+        tc.DrawItem += (_, e) =>
+        {
+            var selected = e.Index == tc.SelectedIndex;
+            using var back = new SolidBrush(selected ? t.NavActive : t.CardBg);
+            e.Graphics.FillRectangle(back, e.Bounds);
+            if (selected)
+            {
+                using var bar = new SolidBrush(t.Accent);
+                e.Graphics.FillRectangle(bar, e.Bounds.X, e.Bounds.Bottom - 3, e.Bounds.Width, 3);
+            }
+            TextRenderer.DrawText(e.Graphics, tc.TabPages[e.Index].Text, tc.Font, e.Bounds,
+                selected ? t.TextPrimary : t.TextSecondary,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        };
     }
 
     /// <summary>DG1：每个网格的绑定源缓存（BindExplicit 走 BindingSource 中介层）。</summary>

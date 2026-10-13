@@ -21,7 +21,7 @@ internal class UcIoT : UserControl, IRefreshable
     private readonly UILabel _lblStatus = new()
     {
         Location = new Point(10, 12), Size = new Size(660, 24), AutoSize = false,
-        Font = new Font("微软雅黑", 9.5F, FontStyle.Bold), ForeColor = Color.FromArgb(0, 122, 204),
+        Font = new Font("微软雅黑", 9.5F, FontStyle.Bold), ForeColor = Theme.Current.Accent,
         Text = "MQTT 网关未启动。"
     };
     private readonly UILineChart _chart = new() { Dock = DockStyle.Fill };
@@ -44,7 +44,7 @@ internal class UcIoT : UserControl, IRefreshable
         {
             Text = "内嵌 Broker 127.0.0.1:18835 · 主题 factory/{设备}/telemetry · 阈值 75℃ / 8.0mm/s",
             Location = new Point(10, 34), Size = new Size(900, 18), AutoSize = false,
-            ForeColor = Color.Gray, Font = new Font("微软雅黑", 8.5F)
+            ForeColor = Theme.Current.TextSecondary, Font = new Font("微软雅黑", 8.5F)
         };
         top.Controls.AddRange(new Control[] { _lblStatus, _btnStart, tip });
 
@@ -166,7 +166,7 @@ internal class UcIoT : UserControl, IRefreshable
         // 告警行标红
         foreach (DataGridViewRow row in _gridHealth.Rows)
             if (row.Cells["状态"].Value?.ToString() == "越限告警")
-                row.DefaultCellStyle.ForeColor = Color.Firebrick;
+                row.DefaultCellStyle.ForeColor = Theme.Current.Danger;
     }
 
     private void RedrawChart()

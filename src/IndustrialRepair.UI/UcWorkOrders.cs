@@ -28,7 +28,7 @@ internal class UcWorkOrders : UserControl, IRefreshable
     private readonly UILabel _lblEmpty = new()
     {
         Dock = DockStyle.Top, Height = 26, Text = "未查询到符合条件的工单", TextAlign = ContentAlignment.MiddleCenter,
-        ForeColor = Color.FromArgb(140, 150, 165), Font = new Font("微软雅黑", 9.5F), BackColor = Color.White, Visible = false
+        ForeColor = Theme.Current.TextSecondary, Font = new Font("微软雅黑", 9.5F), BackColor = Theme.Current.CardBg, Visible = false
     };
 
     private static UIDataGridView FillGrid()
@@ -63,7 +63,7 @@ internal class UcWorkOrders : UserControl, IRefreshable
         btnTake.Visible = _user.HasPerm("order.handle");
         btnFinish.Visible = _user.HasPerm("order.handle");
 
-        var toolbar = new Panel { Dock = DockStyle.Top, Height = 54 };
+        var toolbar = Ui.Toolbar();
         toolbar.Controls.AddRange(new Control[]
         {
             Ui.Lbl("筛选：", 4, 14, 70), _txtKey, _cmbStatus, _chkMine,
@@ -93,8 +93,8 @@ internal class UcWorkOrders : UserControl, IRefreshable
         if (status is not ("待派单" or "已派单" or "维修中")) return;
         if (!drv.Row.Table.Columns.Contains("CreatedAt") || drv.Row["CreatedAt"] == DBNull.Value) return;
         var hours = (DateTime.Now - (DateTime)drv.Row["CreatedAt"]).TotalHours;
-        if (hours > 48) row.DefaultCellStyle.BackColor = Color.FromArgb(255, 224, 224);
-        else if (hours > 24) row.DefaultCellStyle.BackColor = Color.FromArgb(255, 248, 224);
+        if (hours > 48) row.DefaultCellStyle.BackColor = Theme.Current.DangerTint;
+        else if (hours > 24) row.DefaultCellStyle.BackColor = Theme.Current.WarningTint;
     }
 
     private static readonly Dictionary<string, string> StatusMap = new()
@@ -258,12 +258,12 @@ internal class FReportDialog : UIForm
     private readonly PictureBox _photo = new()
     {
         Location = new Point(410, 20), Size = new Size(180, 140), SizeMode = PictureBoxSizeMode.Zoom,
-        BackColor = Color.FromArgb(240, 240, 240), BorderStyle = BorderStyle.FixedSingle
+        BackColor = Theme.Current.CardBg, BorderStyle = BorderStyle.FixedSingle
     };
     private readonly UILabel _lblRecog = new()
     {
         Location = new Point(410, 166), Size = new Size(300, 60), AutoSize = false,
-        ForeColor = Color.FromArgb(0, 122, 204), Font = new Font("微软雅黑", 8.5F), Text = "拍照识别：等待图片…"
+        ForeColor = Theme.Current.Accent, Font = new Font("微软雅黑", 8.5F), Text = "拍照识别：等待图片…"
     };
     private readonly UIButton btnPhoto;
     private readonly UIButton btnClear;
@@ -408,13 +408,13 @@ internal class FOrderDetail : UIForm
     private readonly UILabel _lblReview = new()
     {
         Location = new Point(16, 214), Size = new Size(680, 22), AutoSize = false,
-        Font = new Font("微软雅黑", 9F, FontStyle.Bold), ForeColor = Color.FromArgb(0, 122, 204)
+        Font = new Font("微软雅黑", 9F, FontStyle.Bold), ForeColor = Theme.Current.Accent
     };
     private readonly Panel _reviewActions = new() { Location = new Point(14, 240), Size = new Size(690, 92) };
     private readonly PictureBox _photo = new()
     {
         Location = new Point(496, 14), Size = new Size(196, 140), SizeMode = PictureBoxSizeMode.Zoom,
-        BackColor = Color.FromArgb(240, 240, 240), BorderStyle = BorderStyle.FixedSingle
+        BackColor = Theme.Current.CardBg, BorderStyle = BorderStyle.FixedSingle
     };
     private readonly UIDataGridView _grid = Ui.Grid(16, 440, 680, 130);   // OR7 下移+R23 备注区压缩
     private readonly UITextBox _txtNote = new()
@@ -602,7 +602,7 @@ internal class FOrderDetail : UIForm
             {
                 Text = o.Status is "Done" or "Cancelled" ? "工单已结束，仅可查看审阅结果。" : "当前角色仅可查看（材料审阅需维修处理权限）。",
                 Location = new Point(2, 6), AutoSize = true, Font = new Font("微软雅黑", 9F),
-                ForeColor = Color.Gray
+                ForeColor = Theme.Current.TextSecondary
             });
             return;
         }
@@ -630,7 +630,7 @@ internal class FOrderDetail : UIForm
         var tip = new UILabel
         {
             Text = "候选来自拍照识别；低分候选需人工核对。BOM 内确认仅标记重点，BOM 外需填人工用量。",
-            AutoSize = true, Location = new Point(300, 44), Font = new Font("微软雅黑", 8F), ForeColor = Color.Gray
+            AutoSize = true, Location = new Point(300, 44), Font = new Font("微软雅黑", 8F), ForeColor = Theme.Current.TextSecondary
         };
         _reviewActions.Controls.AddRange(new Control[] { manual, bomOnly, tip });
     }

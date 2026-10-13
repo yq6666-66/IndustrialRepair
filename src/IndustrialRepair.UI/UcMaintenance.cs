@@ -47,7 +47,7 @@ internal class UcMaintenance : UserControl, IRefreshable
     {
         // PM 调度 Tab
         var tabPM = new TabPage("预防性维护调度");
-        var pmToolbar = new Panel { Dock = DockStyle.Top, Height = 40 };
+        var pmToolbar = Ui.Toolbar();
         pmToolbar.Controls.Add(Ui.Btn("新增调度", 10, 4, 90, 30, (_, _) => AddPM()));
         pmToolbar.Controls.Add(Ui.Btn("编辑", 110, 4, 70, 30, (_, _) => EditPM()));
         pmToolbar.Controls.Add(Ui.Btn("删除", 188, 4, 70, 30, (_, _) => DeletePM()));
@@ -57,10 +57,10 @@ internal class UcMaintenance : UserControl, IRefreshable
 
         // EOQ Tab
         var tabEOQ = new TabPage("库存优化建议");
-        var eToolbar = new Panel { Dock = DockStyle.Top, Height = 40 };
+        var eToolbar = Ui.Toolbar();
         var lblE = new UILabel
         { Text = "EOQ 经济批量 + 再订购点 + 安全库存", AutoSize = true,
-          Location = new Point(10, 10), Font = new Font("微软雅黑", 9F), ForeColor = Color.FromArgb(90, 100, 115) };
+          Location = new Point(10, 10), Font = new Font("微软雅黑", 9F), ForeColor = Theme.Current.LabelColor };
         var btnStockIn = Ui.Btn("按建议入库", 320, 4, 100, 30, (_, _) => EoqStockIn());
         var btnExportChart = Ui.Btn("导出图表", 430, 4, 90, 30, (_, _) =>
         {

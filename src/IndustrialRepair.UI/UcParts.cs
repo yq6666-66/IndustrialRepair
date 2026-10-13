@@ -23,7 +23,7 @@ internal class UcParts : UserControl, IRefreshable
     private readonly UILabel _lblEmpty = new()
     {
         Dock = DockStyle.Top, Height = 26, Text = "未查询到配件（可调整关键字或类别）", TextAlign = ContentAlignment.MiddleCenter,
-        ForeColor = Color.FromArgb(140, 150, 165), Font = new Font("微软雅黑", 9.5F), BackColor = Color.White, Visible = false
+        ForeColor = Theme.Current.TextSecondary, Font = new Font("微软雅黑", 9.5F), BackColor = Theme.Current.CardBg, Visible = false
     };
     /// <summary>当前是否为配件列表模式（库存预警/流水视图下禁用行双击编辑）</summary>
     private bool _listMode = true;
@@ -105,7 +105,7 @@ internal class UcParts : UserControl, IRefreshable
         var btnBatchDel = Ui.Btn("批量删除", 985, 46, 90, 32, OnBatchDelete);
         _grid.CellContentClick += OnGridCellClick;
 
-        var toolbar = new Panel { Dock = DockStyle.Top, Height = 84 };
+        var toolbar = Ui.Toolbar();
         toolbar.Controls.AddRange(new Control[]
         {
             Ui.Lbl("关键字：", 4, 14, 80), _txtKey, Ui.Lbl("类别：", 346, 14, 48), _cmbCat,
@@ -346,7 +346,7 @@ internal class UcParts : UserControl, IRefreshable
         if (_grid.Columns.Contains("库存") && _grid.Columns.Contains("下限"))
             foreach (DataGridViewRow row in _grid.Rows)
                 if (row.Cells["库存"].Value is int s && row.Cells["下限"].Value is int m && s < m)
-                    row.DefaultCellStyle.ForeColor = Color.Firebrick;
+                    row.DefaultCellStyle.ForeColor = Theme.Current.Danger;
     }
 
     /// <summary>生成配件二维码标签（开源库 QRCoder，内容 PART:编码，扫码闭环）</summary>

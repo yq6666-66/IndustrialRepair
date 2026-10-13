@@ -10,7 +10,8 @@ public sealed record ThemePalette(
     Color TextPrimary, Color TextSecondary, Color LabelColor,
     Color Accent, Color Glow, Color Cyan,
     Color Success, Color Warning, Color Danger, Color Violet,
-    Color Border, Color InputBg, Color InputBorder, Color PanelBg)
+    Color Border, Color InputBg, Color InputBorder, Color PanelBg,
+    Color DangerTint, Color WarningTint)
 {
     public static readonly ThemePalette Dark = new(
         PageBg: Color.FromArgb(22, 25, 31),
@@ -35,7 +36,9 @@ public sealed record ThemePalette(
         Border: Color.FromArgb(48, 55, 66),
         InputBg: Color.FromArgb(24, 28, 35),
         InputBorder: Color.FromArgb(60, 68, 80),
-        PanelBg: Color.FromArgb(26, 30, 37));
+        PanelBg: Color.FromArgb(26, 30, 37),
+        DangerTint: Color.FromArgb(62, 38, 44),
+        WarningTint: Color.FromArgb(62, 54, 28));
 }
 
 /// <summary>主题入口：当前色板 + 对比度计算（供界面与单测共用）。</summary>
