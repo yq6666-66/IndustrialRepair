@@ -134,7 +134,24 @@ internal class UcWorkOrders : UserControl, IRefreshable
                     row["状态"] = OrderStatusCode.ToChinese(row["状态"].ToString()!);
                     row["优先级"] = PriorityCode.ToChinese(row["优先级"].ToString()!);
                 }
-                _grid.DataSource = t;
+                // DG2：显式列 + BindingSource（AutoGenerateColumns=false；隐藏列显式声明）
+                Ui.BindExplicit(_grid, t, "orders-v1",
+                    new GridCol("OrderId", "ID", FillWeight: 20, Visible: false),
+                    new GridCol("OrderNo", "工单号", FillWeight: 100),
+                    new GridCol("DeviceCode", "设备编码", FillWeight: 70),
+                    new GridCol("DeviceName", "设备名称", FillWeight: 110),
+                    new GridCol("状态", "状态", FillWeight: 60),
+                    new GridCol("优先级", "优先级", FillWeight: 55),
+                    new GridCol("FaultType", "故障类型", FillWeight: 60),
+                    new GridCol("故障描述", "故障描述", FillWeight: 170),
+                    new GridCol("ReporterName", "报修人", FillWeight: 60),
+                    new GridCol("EngineerName", "工程师", FillWeight: 60),
+                    new GridCol("CreatedAt", "报修时间", Format: "MM-dd HH:mm", FillWeight: 90),
+                    new GridCol("材料审阅", "材料审阅", FillWeight: 90),
+                    new GridCol("AssignTime", "派单时间", Format: "MM-dd HH:mm", FillWeight: 90, Visible: false),
+                    new GridCol("FinishTime", "完工时间", Format: "MM-dd HH:mm", FillWeight: 90, Visible: false),
+                    new GridCol("RepairSummary", "维修总结", FillWeight: 100, Visible: false),
+                    new GridCol("ConfirmedPartName", "确认零件", FillWeight: 80, Visible: false));
                 _lblEmpty.Visible = t.Rows.Count == 0;
                 _pager.Show(r);
             }

@@ -39,6 +39,10 @@ public class PartService
         catch (Exception ex) { return Result.Fail(DbHelper.FriendlyError(ex)); }
     }
 
+    /// <summary>DG4：批量删除（单事务 + 引用保护，见 PartRepository.BatchDelete）。</summary>
+    public (int Deleted, List<string> SkippedCodes) BatchDelete(List<int> partIds) =>
+        partIds.Count == 0 ? (0, new List<string>()) : _repo.BatchDelete(partIds);
+
     /// <summary>配件入库（调用存储过程，事务保证 库存+流水+预警 一致）</summary>
     public Result StockIn(int partId, int qty, string refNo)
     {

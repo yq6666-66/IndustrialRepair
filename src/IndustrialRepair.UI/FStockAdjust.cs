@@ -28,7 +28,7 @@ internal class FStockAdjust : UIForm
         ClientSize = new Size(700, 500);
         StartPosition = FormStartPosition.CenterParent;
 
-        // 表格：编码/名称/系统库存/实盘数量/差异
+        // 表格：编码/名称/系统库存/实盘数量/差异（DG2：显式列 + BindingSource）
         _table.Columns.Add("PartId", typeof(int));
         _table.Columns.Add("编码", typeof(string));
         _table.Columns.Add("名称", typeof(string));
@@ -36,17 +36,12 @@ internal class FStockAdjust : UIForm
         _table.Columns.Add("实盘数量", typeof(string));   // 允许编辑的文本
         _table.Columns.Add("差异", typeof(string));
 
-        _grid = new UIDataGridView
-        {
-            Location = new Point(10, 10), Size = new Size(680, 420),
-            Dock = DockStyle.Top, ReadOnly = false, AllowUserToAddRows = false,
-            RowHeadersVisible = false, EnableHeadersVisualStyles = false,
-            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-            ColumnHeadersHeight = 40, RowTemplate = { Height = 34 }
-        };
-        Ui.ApplyGridTheme(_grid);
+        _grid = Ui.Grid(0, 0, 680, 420);
+        _grid.Dock = DockStyle.Top;
+        _grid.ReadOnly = false;   // 唯一可编辑网格：非编辑列由列级 ReadOnly 兜住
         _grid.CellValueChanged += OnCellChanged;
+        // DG3：可编辑列校验（非负整数 + ErrorText 行内提示 + 数字键过滤）
+        Ui.AttachEditableValidation(_grid, "实盘数量", 0);
 
         var lblHint = new UILabel
         {
@@ -67,9 +62,13 @@ internal class FStockAdjust : UIForm
         _table.Rows.Clear();
         foreach (var p in _svc.Search(null).OrderBy(x => x.PartCode))
             _table.Rows.Add(p.PartId, p.PartCode, p.PartName, p.StockQty, "", "");
-        _grid.DataSource = _table;
-        _grid.Columns["PartId"]!.Visible = false;
-        _grid.Columns["实盘数量"]!.ReadOnly = false;   // 唯一可编辑列
+        Ui.BindExplicit(_grid, _table, "adjust-v1",
+            new GridCol("PartId", "ID", FillWeight: 20, Visible: false),
+            new GridCol("编码", "编码", FillWeight: 90),
+            new GridCol("名称", "名称", FillWeight: 140),
+            new GridCol("系统库存", "系统库存", FillWeight: 70),
+            new GridCol("实盘数量", "实盘数量", FillWeight: 80, Editable: true),
+            new GridCol("差异", "差异", FillWeight: 60));
     }
 
     private void OnCellChanged(object? sender, DataGridViewCellEventArgs e)

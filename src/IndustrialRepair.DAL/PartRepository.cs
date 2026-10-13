@@ -85,6 +85,57 @@ public class PartRepository
     public void Delete(int partId) =>
         DbHelper.ExecuteNonQuery("DELETE FROM dbo.part WHERE PartId=@Id", CommandType.Text, DbHelper.P("@Id", partId));
 
+    /// <summary>
+    /// DG4：批量删除配件（对齐课程「批量删除 + SqlTransaction」范式）——
+    /// 单一事务内逐个处理：被业务引用（BOM / 领料明细 / 库存流水 / 库存预警 / 工单确认零件）
+    /// 的配件跳过并记录编码，其余连同其供应商关联（配置数据）一并物理删除；
+    /// 任一步骤异常整体回滚（要么全提交、要么全撤销）。
+    /// </summary>
+    public (int Deleted, List<string> SkippedCodes) BatchDelete(List<int> partIds)
+    {
+        int deleted = 0;
+        var skipped = new List<string>();
+        DbHelper.RunInTransaction((conn, tran) =>
+        {
+            foreach (var id in partIds)
+            {
+                // 1) 引用检查：被任一业务表引用即跳过
+                int refs;
+                using (var check = new SqlCommand(
+                    @"SELECT
+                        (SELECT COUNT(*) FROM dbo.bom              WHERE PartId=@Id)
+                      + (SELECT COUNT(*) FROM dbo.picking_item     WHERE PartId=@Id)
+                      + (SELECT COUNT(*) FROM dbo.part_stock_log   WHERE PartId=@Id)
+                      + (SELECT COUNT(*) FROM dbo.stock_alert      WHERE PartId=@Id)
+                      + (SELECT COUNT(*) FROM dbo.work_order       WHERE ConfirmedPartId=@Id)", conn, tran))
+                {
+                    check.Parameters.AddWithValue("@Id", id);
+                    refs = Convert.ToInt32(check.ExecuteScalar() ?? 0);
+                }
+                if (refs > 0)
+                {
+                    using var codeCmd = new SqlCommand("SELECT PartCode FROM dbo.part WHERE PartId=@Id", conn, tran);
+                    codeCmd.Parameters.AddWithValue("@Id", id);
+                    skipped.Add(codeCmd.ExecuteScalar()?.ToString() ?? id.ToString());
+                    continue;
+                }
+                // 2) 供应商关联为纯配置数据，随配件一并删除
+                using (var unlink = new SqlCommand("DELETE FROM dbo.part_vendor WHERE PartId=@Id", conn, tran))
+                {
+                    unlink.Parameters.AddWithValue("@Id", id);
+                    unlink.ExecuteNonQuery();
+                }
+                // 3) 物理删除
+                using (var del = new SqlCommand("DELETE FROM dbo.part WHERE PartId=@Id", conn, tran))
+                {
+                    del.Parameters.AddWithValue("@Id", id);
+                    deleted += del.ExecuteNonQuery();
+                }
+            }
+        });
+        return (deleted, skipped);
+    }
+
     public List<PartCategory> ListCategories()
     {
         var list = new List<PartCategory>();

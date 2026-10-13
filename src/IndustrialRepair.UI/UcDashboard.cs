@@ -250,6 +250,15 @@ internal class UcDashboard : UserControl, IRefreshable
                 "PartCode" => "编码", "PartName" => "名称", "Spec" => "规格", "Unit" => "单位",
                 "StockQty" => "当前库存", "MinStock" => "下限", _ => "类别"
             };
-        _gridLow.DataSource = low;
+        // DG2：显式列 + BindingSource
+        Ui.BindExplicit(_gridLow, low, "dash-low-v1",
+            new GridCol("编码", "编码", FillWeight: 85),
+            new GridCol("名称", "名称", FillWeight: 120),
+            new GridCol("规格", "规格", FillWeight: 110),
+            new GridCol("单位", "单位", FillWeight: 45),
+            new GridCol("当前库存", "当前库存", FillWeight: 70),
+            new GridCol("下限", "下限", FillWeight: 55),
+            new GridCol("缺口", "缺口", FillWeight: 55),
+            new GridCol("类别", "类别", FillWeight: 70));
     }
 }

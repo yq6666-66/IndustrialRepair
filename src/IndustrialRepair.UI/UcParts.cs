@@ -64,9 +64,7 @@ internal class UcParts : UserControl, IRefreshable
         var btnLog = Ui.Btn("库存流水", 200, 46, 90, 32, (_, _) =>
         {
             var p = Selected();
-            _listMode = false;
-            _grid.DataSource = _svc.StockLogs(p?.PartId ?? 0);
-            RenameColumns();
+            ShowLogs(p?.PartId ?? 0);
         });
         var btnQr = Ui.Btn("生成二维码", 300, 46, 100, 32, OnGenerateQr);
         var btnXls = Ui.Btn("导出Excel", 410, 46, 90, 32, OnExportExcel);
@@ -75,7 +73,7 @@ internal class UcParts : UserControl, IRefreshable
             try
             {
                 if (!_listMode) { Ui.Error("库存预警/流水视图不支持 PDF 导出，请先查询配件列表。"); return; }
-                if (_grid.DataSource is not System.Data.DataTable t || t.Rows.Count == 0)
+                if (Ui.TableOf(_grid) is not { } t || t.Rows.Count == 0)
                 { Ui.Error("当前无数据可导出。"); return; }
                 var view = t.Copy();
                 view.Columns.Remove("PartId");
@@ -88,7 +86,7 @@ internal class UcParts : UserControl, IRefreshable
         {
             try
             {
-                if (!_listMode || _grid.DataSource is not System.Data.DataTable t || t.Rows.Count == 0)
+                if (!_listMode || Ui.TableOf(_grid) is not { } t || t.Rows.Count == 0)
                 { Ui.Error("请先查询要打印标签的配件列表。"); return; }
                 var view = t.Copy();
                 view.Columns.Remove("PartId");
@@ -102,12 +100,16 @@ internal class UcParts : UserControl, IRefreshable
             dlg.ShowDialog();
             LoadParts(1, _pageSize);
         });
+        // DG4：批量操作（勾选列 + 全选/清空 + 批量删除·单事务）
+        var btnSelAll = Ui.Btn("全选", 905, 46, 70, 32, OnToggleSelectAll);
+        var btnBatchDel = Ui.Btn("批量删除", 985, 46, 90, 32, OnBatchDelete);
+        _grid.CellContentClick += OnGridCellClick;
 
         var toolbar = new Panel { Dock = DockStyle.Top, Height = 84 };
         toolbar.Controls.AddRange(new Control[]
         {
             Ui.Lbl("关键字：", 4, 14, 80), _txtKey, Ui.Lbl("类别：", 346, 14, 48), _cmbCat,
-            btnQuery, btnAdd, btnEdit, btnDel, btnIn, btnLow, btnLog, btnQr, btnXls, btnPdf, btnImport, btnLabels, btnAdjust
+            btnQuery, btnAdd, btnEdit, btnDel, btnIn, btnLow, btnLog, btnQr, btnXls, btnPdf, btnImport, btnLabels, btnAdjust, btnSelAll, btnBatchDel
         });
 
         // Dock 布局（同 FMain 模式）：填充控件先加，标题条最后加；分页条在工具栏之下
@@ -200,7 +202,7 @@ internal class UcParts : UserControl, IRefreshable
                         t.Columns.Add("Status", typeof(bool));
                         foreach (var (_, p) in ranked)
                             t.Rows.Add(p.PartId, p.PartCode, p.PartName, p.CategoryName, p.Spec, p.Unit, p.Price, p.StockQty, p.MinStock, p.Status);
-                        _grid.DataSource = Translate(t);
+                        BindList(Translate(t));
                         _lblEmpty.Visible = false;
                         _lblEmpty.Text = $"未精确命中，模糊搜索 \"{keyword}\" 返回 {ranked.Count} 条（编辑距离匹配）";
                         _lblEmpty.Visible = false;   // 有模糊结果不显示空态
@@ -209,10 +211,9 @@ internal class UcParts : UserControl, IRefreshable
                     }
                 }
 
-                var dt = Translate(r.Items);
-                _grid.DataSource = dt;
+                BindList(Translate(r.Items));
                 _lblEmpty.Text = "未查询到配件（可调整关键字或类别）";
-                _lblEmpty.Visible = dt.Rows.Count == 0;
+                _lblEmpty.Visible = Ui.TableOf(_grid)?.Rows.Count == 0;
                 _pager.Show(r);
                 RenameColumns();
             }
@@ -233,16 +234,110 @@ internal class UcParts : UserControl, IRefreshable
                 r["状态"] = (bool)r["Status"] ? "启用" : "停用";
         }
         src.Columns.Remove("Status");
-        src.Columns.Remove("FeatureJson");
-        src.Columns.Remove("CategoryId");
+        if (src.Columns.Contains("FeatureJson")) src.Columns.Remove("FeatureJson");
+        if (src.Columns.Contains("CategoryId")) src.Columns.Remove("CategoryId");
+        // DG4：批量操作勾选列（内存态，不落库）
+        if (!src.Columns.Contains("选中"))
+        {
+            src.Columns.Add("选中", typeof(bool));
+            foreach (System.Data.DataRow r in src.Rows) r["选中"] = false;
+        }
+        src.Columns["选中"]!.SetOrdinal(0);
         return src;
+    }
+
+    /// <summary>DG2：主列表显式列绑定（AutoGenerateColumns=false + BindingSource）。</summary>
+    private void BindList(System.Data.DataTable dt) =>
+        Ui.BindExplicit(_grid, dt, "parts-v2",
+            new GridCol("选中", "选", FillWeight: 35, IsCheck: true),
+            new GridCol("PartId", "ID", FillWeight: 20, Visible: false),
+            new GridCol("编码", "编码", FillWeight: 90),
+            new GridCol("名称", "名称", FillWeight: 130),
+            new GridCol("类别", "类别", FillWeight: 70),
+            new GridCol("规格", "规格", FillWeight: 120),
+            new GridCol("单位", "单位", FillWeight: 45),
+            new GridCol("单价", "单价", Format: "N2", FillWeight: 65),
+            new GridCol("库存", "库存", FillWeight: 60),
+            new GridCol("下限", "下限", FillWeight: 55),
+            new GridCol("状态", "状态", FillWeight: 55));
+
+    /// <summary>DG4：勾选列点击翻转（只读网格下手动维护内存勾选态）+ 重绘。</summary>
+    private void OnGridCellClick(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+        if (_grid.Columns[e.ColumnIndex].Name != "选中") return;
+        var t = Ui.TableOf(_grid);
+        if (t == null || e.RowIndex >= t.Rows.Count) return;
+        var row = t.Rows[e.RowIndex];
+        row["选中"] = !(row["选中"] is bool b && b);
+        _grid.InvalidateRow(e.RowIndex);
+    }
+
+    /// <summary>DG4：全选 / 清空切换。</summary>
+    private void OnToggleSelectAll(object? sender, EventArgs e)
+    {
+        if (!_listMode) { Ui.Error("请在配件列表视图使用全选。"); return; }
+        var t = Ui.TableOf(_grid);
+        if (t == null || !t.Columns.Contains("选中")) return;
+        var btn = sender as UIButton;
+        var allChecked = t.Rows.Count > 0 && t.Rows.Cast<System.Data.DataRow>().All(r => r["选中"] is bool b && b);
+        var target = !allChecked;
+        foreach (System.Data.DataRow r in t.Rows) r["选中"] = target;
+        if (btn != null) btn.Text = target ? "清空" : "全选";
+        _grid.Refresh();
+    }
+
+    /// <summary>DG4：批量删除（单事务 + 引用保护，对齐课程 SqlTransaction 范式）。</summary>
+    private void OnBatchDelete(object? sender, EventArgs e)
+    {
+        if (!_listMode) { Ui.Error("请在配件列表视图勾选后再批量删除。"); return; }
+        var t = Ui.TableOf(_grid);
+        if (t == null || !t.Columns.Contains("选中")) return;
+        var ids = t.Rows.Cast<System.Data.DataRow>()
+            .Where(r => r["选中"] is bool b && b)
+            .Select(r => Convert.ToInt32(r["PartId"])).ToList();
+        if (ids.Count == 0) { Ui.Error("请先勾选要删除的配件（首列复选框，或点「全选」）。"); return; }
+        if (!Ui.Ask($"确定批量删除勾选的 {ids.Count} 个配件？\n被 BOM/领料单/库存流水等业务数据引用的配件将自动跳过。")) return;
+        try
+        {
+            var (deleted, skipped) = _svc.BatchDelete(ids);
+            var msg = $"批量删除完成：成功 {deleted} 个（单事务提交）。";
+            if (skipped.Count > 0)
+                msg += $"\n跳过 {skipped.Count} 个（被业务引用）：{string.Join("、", skipped.Take(8))}{(skipped.Count > 8 ? " 等" : "")}";
+            Ui.Info(msg);
+            RefreshData();
+        }
+        catch (Exception ex) { Ui.Error(DAL.DbHelper.FriendlyError(ex)); }
     }
 
     private void ShowLow()
     {
         _listMode = false;
-        _grid.DataSource = _svc.LowStock();
+        // DG2：低库存视图独立列集（列名直接中文化，复用 RenameColumns 的标红逻辑）
+        Ui.BindExplicit(_grid, _svc.LowStock(), "parts-low-v1",
+            new GridCol("PartCode", "编码", FillWeight: 90),
+            new GridCol("PartName", "名称", FillWeight: 130),
+            new GridCol("Spec", "规格", FillWeight: 120),
+            new GridCol("Unit", "单位", FillWeight: 45),
+            new GridCol("StockQty", "库存", FillWeight: 60),
+            new GridCol("MinStock", "下限", FillWeight: 55),
+            new GridCol("Gap", "缺口", FillWeight: 55),
+            new GridCol("CategoryName", "类别", FillWeight: 70));
         RenameColumns();
+    }
+
+    /// <summary>DG2：库存流水视图显式列（原自动列显示英文表头）。</summary>
+    private void ShowLogs(int partId)
+    {
+        _listMode = false;
+        Ui.BindExplicit(_grid, _svc.StockLogs(partId), "parts-logs-v1",
+            new GridCol("StockLogId", "ID", FillWeight: 20, Visible: false),
+            new GridCol("PartCode", "编码", FillWeight: 90),
+            new GridCol("PartName", "名称", FillWeight: 130),
+            new GridCol("ChangeQty", "变动数量", FillWeight: 70),
+            new GridCol("AfterQty", "结存", FillWeight: 60),
+            new GridCol("RefNo", "参考单号", FillWeight: 100),
+            new GridCol("CreatedAt", "时间", Format: "MM-dd HH:mm", FillWeight: 90));
     }
 
     private void RenameColumns()
@@ -276,7 +371,7 @@ internal class UcParts : UserControl, IRefreshable
     {
         try
         {
-            if (_grid.DataSource is not System.Data.DataTable t || t.Rows.Count == 0)
+            if (Ui.TableOf(_grid) is not { } t || t.Rows.Count == 0)
             { Ui.Error("当前无数据可导出。"); return; }
             btnGuard(s, () =>
             {

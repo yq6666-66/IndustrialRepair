@@ -193,7 +193,21 @@ internal class UcMaintenance : UserControl, IRefreshable
         if (t.Columns.Contains("NextDueAt")) t.Columns["NextDueAt"]!.ColumnName = "下次到期";
         if (t.Columns.Contains("IsActive")) t.Columns["IsActive"]!.ColumnName = "启用";
         if (t.Columns.Contains("GeneratedOrders")) t.Columns["GeneratedOrders"]!.ColumnName = "已生成工单";
-        _gridPM.DataSource = t;
+        // DG2：显式列 + BindingSource（ScheduleId 隐藏列保留供编辑/删除取行）
+        Ui.BindExplicit(_gridPM, t, "pm-v1",
+            new GridCol("ScheduleId", "ID", FillWeight: 20, Visible: false),
+            new GridCol("DeviceId", "设备ID", FillWeight: 20, Visible: false),
+            new GridCol("Title", "任务名称", FillWeight: 140),
+            new GridCol("DeviceName", "设备", FillWeight: 120),
+            new GridCol("触发方式", "触发方式", FillWeight: 70),
+            new GridCol("IntervalDays", "间隔天数", FillWeight: 65),
+            new GridCol("IntervalHours", "间隔小时", FillWeight: 65),
+            new GridCol("LastExecutedAt", "上次执行", Format: "MM-dd HH:mm", FillWeight: 90),
+            new GridCol("下次到期", "下次到期", Format: "MM-dd HH:mm", FillWeight: 90),
+            new GridCol("启用", "启用", FillWeight: 50),
+            new GridCol("已生成工单", "已生成工单", FillWeight: 75),
+            new GridCol("TemplateDesc", "模板描述", FillWeight: 120, Visible: false),
+            new GridCol("TemplatePriority", "优先级", FillWeight: 60, Visible: false));
     }
 
     private void LoadEOQ()
@@ -217,7 +231,20 @@ internal class UcMaintenance : UserControl, IRefreshable
                 Math.Ceiling(r.Eoq), Math.Ceiling(r.ReorderPoint), Math.Ceiling(r.SafetyStock),
                 r.VendorName ?? "—", r.SupplyPrice ?? 0m, r.LeadTimeDays,
                 r.ShouldReorder, r.Recommendation);
-        _gridEOQ.DataSource = t;
+        // DG2：显式列 + BindingSource
+        Ui.BindExplicit(_gridEOQ, t, "eoq-v1",
+            new GridCol("编码", "编码", FillWeight: 80),
+            new GridCol("名称", "名称", FillWeight: 120),
+            new GridCol("当前库存", "当前库存", FillWeight: 65),
+            new GridCol("年用量", "年用量", FillWeight: 65),
+            new GridCol("EOQ建议批量", "EOQ建议批量", FillWeight: 80),
+            new GridCol("再订购点", "再订购点", FillWeight: 75),
+            new GridCol("安全库存", "安全库存", FillWeight: 70),
+            new GridCol("首选供应商", "首选供应商", FillWeight: 95),
+            new GridCol("供货价", "供货价", Format: "N2", FillWeight: 65),
+            new GridCol("交期(天)", "交期(天)", FillWeight: 60),
+            new GridCol("需订购", "需订购", FillWeight: 55),
+            new GridCol("建议", "建议", FillWeight: 220));
 
         // ScottPlot：消耗量柱状图
         _plot.Plot.Clear();

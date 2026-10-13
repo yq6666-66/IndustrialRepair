@@ -126,7 +126,19 @@ internal class UcPicking : UserControl, IRefreshable
                 if (t.Columns.Contains("Status")) t.Columns["Status"]!.ColumnName = "状态";
                 foreach (System.Data.DataRow row in t.Rows)
                     row["状态"] = PickingStatusCode.ToChinese(row["状态"].ToString()!);
-                _grid.DataSource = t;
+                // DG2：显式列 + BindingSource
+                Ui.BindExplicit(_grid, t, "picking-v1",
+                    new GridCol("PickingId", "ID", FillWeight: 20, Visible: false),
+                    new GridCol("PickingNo", "领料单号", FillWeight: 110),
+                    new GridCol("OrderId", "工单ID", FillWeight: 20, Visible: false),
+                    new GridCol("OrderNo", "工单号", FillWeight: 100),
+                    new GridCol("DeviceName", "设备名称", FillWeight: 110),
+                    new GridCol("GeneratedBy", "生成人", FillWeight: 70),
+                    new GridCol("Redundancy", "冗余系数", FillWeight: 60),
+                    new GridCol("TotalAmount", "金额", Format: "N2", FillWeight: 80),
+                    new GridCol("状态", "状态", FillWeight: 60),
+                    new GridCol("CreatedAt", "生成时间", Format: "MM-dd HH:mm", FillWeight: 90),
+                    new GridCol("IssuedAt", "出库时间", Format: "MM-dd HH:mm", FillWeight: 90));
                 _lblEmptyMain.Visible = t.Rows.Count == 0;
                 _pager.Show(r);
                 _lblSummary.Text = "";

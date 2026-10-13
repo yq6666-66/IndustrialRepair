@@ -480,5 +480,24 @@ Check("停机结束(R45)", downStop.Success, downStop.Message);
 var downSummary = downSvc.DeviceDowntime();
 Check("停机汇总非空(R45)", downSummary.Rows.Count > 0, $"共 {downSummary.Rows.Count} 台设备");
 
+// 11.4 DG4：批量删除（单事务 + 引用保护）——"一条可删 + 一条被 BOM 引用" → 恰删 1 跳 1
+var catId = partSvc.Categories()[0].CategoryId;
+var pFree = partSvc.Save(new Part { PartCode = "SMOKE-DEL-1", PartName = "冒烟待删件", CategoryId = catId, Unit = "个", Price = 1m });
+var pRef = partSvc.Save(new Part { PartCode = "SMOKE-DEL-2", PartName = "冒烟引用件", CategoryId = catId, Unit = "个", Price = 1m });
+Check("批量删除用例配件创建(DG4)", pFree.Success && pRef.Success, pFree.Message + " / " + pRef.Message);
+var createdFree = partSvc.Search("SMOKE-DEL-1").FirstOrDefault(x => x.PartCode == "SMOKE-DEL-1");
+var createdRef = partSvc.Search("SMOKE-DEL-2").FirstOrDefault(x => x.PartCode == "SMOKE-DEL-2");
+if (createdFree != null && createdRef != null)
+{
+    new BasicRepository().AddBom(devices[0].DeviceId, createdRef.PartId, 1m, "冒烟批量删除引用");
+    var (delN, skipCodes) = partSvc.BatchDelete(new List<int> { createdFree.PartId, createdRef.PartId });
+    Check("批量删除事务恰删1(DG4)", delN == 1, $"deleted={delN}");
+    Check("被引用配件自动跳过(DG4)", skipCodes.Count == 1 && skipCodes[0] == "SMOKE-DEL-2", $"skipped=[{string.Join(",", skipCodes)}]");
+    // 清理：解除 BOM 引用后删掉受保护件，保持测试库可重复运行
+    DbHelper.ExecuteNonQuery("DELETE FROM dbo.bom WHERE DeviceId=@D AND PartId=@P",
+        System.Data.CommandType.Text, DbHelper.P("@D", devices[0].DeviceId), DbHelper.P("@P", createdRef.PartId));
+    partSvc.BatchDelete(new List<int> { createdRef.PartId });
+}
+
 Console.WriteLine($"\n结果：{pass} 通过 / {fail} 失败");
 return fail == 0 ? 0 : 1;

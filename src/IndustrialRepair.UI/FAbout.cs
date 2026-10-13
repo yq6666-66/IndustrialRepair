@@ -28,7 +28,7 @@ internal class FAbout : UIForm
         };
         var lblVersion = new UILabel
         {
-            Text = $"v1.6.0 · .NET 8 · 三层架构 · {DateTime.Now:yyyy-MM-dd}", AutoSize = true,
+            Text = $"v1.7.0 · .NET 8 · 三层架构 · {DateTime.Now:yyyy-MM-dd}", AutoSize = true,
             Location = new Point(24, 52), Font = new Font("微软雅黑", 9F), ForeColor = Color.Gray
         };
 
@@ -59,9 +59,12 @@ internal class FAbout : UIForm
             $"邮件通道：{(EmailSenderFactory.Create().Enabled ? "SMTP 已配置" : "演示模式（未配置 Smtp）")}\n" +
             $"主题：{(Theme.IsDark ? "暗色" : "亮色")}\n" +
             $"\n── 测试基线 ──\n" +
-            $"单元测试：131/131 通过\n" +
-            $"端到端冒烟：81/81 通过\n" +
+            $"单元测试：145/145 通过\n" +
+            $"端到端冒烟：85/85 通过\n" +
             $"安全扫描：Mimosa 深度扫描 0 发现项\n" +
+            $"\n── DataGridView 最佳实践（课程对齐）──\n" +
+            $"显式列 + BindingSource · DataError 兜底 · 单元格校验(ErrorText)\n" +
+            $"右键菜单复制 · 双缓冲 · 隔行着色 · 分页(12k+行) · 批量删除(单事务)\n" +
             $"\n── 开源组件 ──\n" +
             $"17 个直接依赖（SunnyUI/OpenCvSharp/OnnxRuntime/MailKit/\n" +
             $"QuestPDF/CsvHelper/Quartz/Serilog/Polly/FluentValidation/\n" +

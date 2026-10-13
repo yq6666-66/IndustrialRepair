@@ -119,7 +119,7 @@ IndustrialRepair/
 │  ├─ IndustrialRepair.BLL/    # 业务层（认证/工单/算料/识别/串口/会话）
 │  ├─ IndustrialRepair.DAL/    # ADO.NET 数据访问层（DbHelper + 仓储）
 │  └─ IndustrialRepair.Models/ # 实体
-├─ test/SmokeConsole/       # 无界面端到端冒烟测试（82 项断言）
+├─ test/SmokeConsole/       # 无界面端到端冒烟测试（85 项断言）
 └─ docs/                    # 报告素材、截图
 ```
 
@@ -148,8 +148,8 @@ IndustrialRepair/
 ## 已验证
 
 - `dotnet build -m:1`：0 错误 0 警告（解决方案含 UI/BLL/DAL/Models、tests/IndustrialRepair.Tests、test/SmokeConsole、test/RecognizeEval）
-- `dotnet test tests/IndustrialRepair.Tests`：**138/138**（BOM 算料 / 口令哈希 / 扫码协议 / 候选规整 / CSV 转义 / 评测统计 / 服务层守卫 / 口令策略 / 邮件 / PDF / 通知中心 / 文件日志 / FluentValidation 校验 / CsvHelper / ONNX 后端 / 模糊搜索 / EOQ+OEE 算法含交期回退）
-- `dotnet run --project test/SmokeConsole -- --conn="<测试库连接串>"`：**82/82**（迁移+结构校验、认证/RBAC、工单全流程含服务层越权拒绝、触发器审计、材料审阅全场景[BomOnly/快照/禁改/BOM内★/BOM外补量/留痕/快照不变性]、C#↔存储过程算料一致、并发出库恰好一次、大屏/报表/串口、QRCoder↔ZXing 回环、OpenCV、ClosedXML、MQTT 确定性越限+冷却、PM 到期自动建单+硬关联回写、EOQ 建议、停机追踪）
+- `dotnet test tests/IndustrialRepair.Tests`：**145/145**（BOM 算料 / 口令哈希 / 扫码协议 / 候选规整 / CSV 转义 / 评测统计 / 服务层守卫 / 口令策略 / 邮件 / PDF / 通知中心 / 文件日志 / FluentValidation 校验 / CsvHelper / ONNX 后端 / 模糊搜索 / EOQ+OEE 算法含交期回退 / 迁移脚本嵌入）
+- `dotnet run --project test/SmokeConsole -- --conn="<测试库连接串>"`：**85/85**（迁移+结构校验、认证/RBAC、工单全流程含服务层越权拒绝、触发器审计、材料审阅全场景[BomOnly/快照/禁改/BOM内★/BOM外补量/留痕/快照不变性]、C#↔存储过程算料一致、并发出库恰好一次、大屏/报表/串口、QRCoder↔ZXing 回环、OpenCV、ClosedXML、MQTT 确定性越限+冷却、PM 到期自动建单+硬关联回写、EOQ 建议、停机追踪、批量删除单事务+引用保护）
   - 冒烟含写操作，必须显式 `--conn=` 指向**独立测试库**（如 `IndustrialRepair_Test_R4`），指向业务库 `IndustrialRepairDb` 时拒绝启动；`--ensure-structure` 模式可用于升级演练；`--diag-script=` 逐批定位脚本错误
 - 数据库升级（M0 机制）：空库初始化、旧库升级（备份恢复演练：版本 2 + 13 工单保留）、重复启动幂等、故意失败批次整体回滚
 - AI 评测工具 `test/RecognizeEval`：`--mode=qr` 扫码回环 4/4；`--mode=visual` 输出 Top1/Top3/未匹配/负样本错误接受/混淆矩阵（合成图实测 Top1 0/3——如实呈现当前特征库引擎局限，真实外观效果待独立真实图集评测）

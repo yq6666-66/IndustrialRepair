@@ -78,7 +78,17 @@ internal class UcUsers : UserControl, IRefreshable
                         "UserId" => "ID", "UserName" => "用户名", "RealName" => "姓名", "Phone" => "手机",
                         "Email" => "邮箱", "状态显示" => "状态", "MFA显示" => "MFA", "LastLoginTime" => "最后登录", _ => "角色"
                     };
-                _gridUsers.DataSource = t;
+                // DG2：显式列 + BindingSource（ID 隐藏列保留供权限操作取行）
+                Ui.BindExplicit(_gridUsers, t, "users-v1",
+                    new GridCol("ID", "ID", FillWeight: 20, Visible: false),
+                    new GridCol("用户名", "用户名", FillWeight: 90),
+                    new GridCol("姓名", "姓名", FillWeight: 80),
+                    new GridCol("手机", "手机", FillWeight: 90),
+                    new GridCol("邮箱", "邮箱", FillWeight: 140),
+                    new GridCol("状态", "状态", FillWeight: 50),
+                    new GridCol("MFA", "MFA", FillWeight: 45),
+                    new GridCol("最后登录", "最后登录", Format: "MM-dd HH:mm", FillWeight: 95),
+                    new GridCol("角色", "角色", FillWeight: 80));
             }
             else if (_tabs.SelectedIndex == 1)
             {
