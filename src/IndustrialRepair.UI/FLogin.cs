@@ -101,7 +101,7 @@ public class FLogin : UILoginForm
     {
         Text = text, Size = new Size(100, 32),
         FillColor = Color.White, RectColor = Color.White,
-        ForeColor = Color.FromArgb(41, 108, 202),
+        ForeColor = Theme.Current.Accent,
         Font = new Font("微软雅黑", 8.5F), Cursor = Cursors.Hand
     };
 
