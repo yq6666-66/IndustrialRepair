@@ -15,9 +15,17 @@ internal class UcUsers : UserControl, IRefreshable
 {
     private readonly UserRepository _users = new();
     private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
-    private readonly UIDataGridView _gridUsers = Ui.Grid(10, 50, 1160, 620);
-    private readonly UIDataGridView _gridLogin = Ui.Grid(10, 10, 1160, 660);
-    private readonly UIDataGridView _gridOp = Ui.Grid(10, 10, 1160, 660);
+    // 网格一律 Dock 填充：固定尺寸 + Anchor 在 TabPage 初始小尺寸下会算出负偏移，最大化后拉出窗口
+    private readonly UIDataGridView _gridUsers = FillGrid3();
+    private readonly UIDataGridView _gridLogin = FillGrid3();
+    private readonly UIDataGridView _gridOp = FillGrid3();
+
+    private static UIDataGridView FillGrid3()
+    {
+        var g = Ui.Grid(0, 0, 100, 100);
+        g.Dock = DockStyle.Fill;
+        return g;
+    }
 
     public UcUsers()
     {
@@ -31,10 +39,12 @@ internal class UcUsers : UserControl, IRefreshable
         var btnRole = Ui.Btn("调整角色", 220, 12, 90, 32, OnRole);
         var btnMfa = Ui.Btn("MFA开关", 320, 12, 90, 32, OnMfa);
 
+        tabUsers.Padding = new Padding(10, 52, 10, 10);
+        tabLogin.Padding = new Padding(10, 10, 10, 10);
+        tabOp.Padding = new Padding(10, 10, 10, 10);
         tabUsers.Controls.Add(_gridUsers);
         tabLogin.Controls.Add(_gridLogin);
         tabOp.Controls.Add(_gridOp);
-        _gridUsers.Location = new Point(10, 50);
 
         tabUsers.Controls.AddRange(new Control[] { btnToggle, btnReset, btnRole, btnMfa });
         _tabs.TabPages.Add(tabUsers);
@@ -119,7 +129,7 @@ internal class UcUsers : UserControl, IRefreshable
 
     /* ---- 备份恢复（OR2） ---- */
     private readonly BackupService _backup = new();
-    private readonly UIDataGridView _gridBackup = Ui.Grid(10, 54, 1160, 560);
+    private readonly UIDataGridView _gridBackup = FillGrid3();
 
     private void BuildBackupTab(TabPage tab)
     {
@@ -162,6 +172,7 @@ internal class UcUsers : UserControl, IRefreshable
             ForeColor = Color.FromArgb(110, 122, 138)
         };
 
+        tab.Padding = new Padding(10, 54, 10, 10);
         tab.Controls.AddRange(new Control[] { btnBackup, btnRestore, btnDelete, btnOpen, lblHint, _gridBackup });
     }
 

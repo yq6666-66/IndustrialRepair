@@ -16,7 +16,7 @@ internal class FAbout : UIForm
     {
         Text = "关于";
         Ui.CloseOnEsc(this);
-        ClientSize = new Size(480, 430);
+        ClientSize = new Size(500, 600);   // 内容 22 行，430 高会裁掉开源组件与快捷键两节
         StartPosition = FormStartPosition.CenterParent;
         Ui.ApplyDialogTheme(this);
 
@@ -24,19 +24,19 @@ internal class FAbout : UIForm
         {
             Text = "工业维修智能化零件分配平台", AutoSize = true,
             Location = new Point(24, 20), Font = new Font("微软雅黑", 16F, FontStyle.Bold),
-            ForeColor = Color.FromArgb(41, 108, 202)
+            ForeColor = Theme.Current.Accent
         };
         var lblVersion = new UILabel
         {
-            Text = $"v1.7.0 · .NET 8 · 三层架构 · {DateTime.Now:yyyy-MM-dd}", AutoSize = true,
-            Location = new Point(24, 52), Font = new Font("微软雅黑", 9F), ForeColor = Color.Gray
+            Text = $"v1.8.0 · .NET 8 · 三层架构 · {DateTime.Now:yyyy-MM-dd}", AutoSize = true,
+            Location = new Point(24, 52), Font = new Font("微软雅黑", 9F), ForeColor = Theme.Current.TextSecondary
         };
 
-        // 系统诊断
+        // 系统诊断（高度取到按钮上方，避免正文末行被裁）
         var lblDiag = new UILabel
         {
-            Location = new Point(24, 84), Size = new Size(432, 200), AutoSize = false,
-            Font = new Font("微软雅黑", 9F), ForeColor = Color.FromArgb(48, 56, 68), Text = ""
+            Location = new Point(24, 84), Size = new Size(452, 458), AutoSize = false,
+            Font = new Font("微软雅黑", 9F), ForeColor = Theme.Current.TextPrimary, Text = ""
         };
 
         // 数据库检查
@@ -73,7 +73,7 @@ internal class FAbout : UIForm
             $"\n── 快捷键 ──\n" +
             $"Ctrl+K 全局搜索 · F5 刷新当前页 · F11 大屏全屏 · ESC 关闭对话框";
 
-        var btnOk = Ui.Btn("确定", 190, 380, 100, 32, (_, _) => Close());
+        var btnOk = Ui.Btn("确定", 200, 550, 100, 32, (_, _) => Close(), primary: true);
         Controls.AddRange(new Control[] { lblTitle, lblVersion, lblDiag, btnOk });
     }
 }

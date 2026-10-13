@@ -24,11 +24,20 @@ internal class UcIoT : UserControl, IRefreshable
         Font = new Font("微软雅黑", 9.5F, FontStyle.Bold), ForeColor = Theme.Current.Accent,
         Text = "MQTT 网关未启动。"
     };
-    private readonly UILineChart _chart = new() { Dock = DockStyle.Fill };
+    private readonly UILineChart _chart = new()
+    {
+        Dock = DockStyle.Fill, ChartStyleType = UIChartStyleType.Dark,
+        ForeColor = Theme.Current.TextSecondary, RectColor = Theme.Current.Border
+    };
     private readonly UIDataGridView _gridHealth = Ui.Grid(0, 0, 100, 100);
     private readonly UITextBox _log = new()
     {
-        Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, Font = new Font("Consolas", 9F)
+        Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, Font = new Font("Consolas", 9F),
+        StyleCustomMode = true, FillColor = Theme.Current.InputBg, ForeColor = Theme.Current.TextPrimary,
+        RectColor = Theme.Current.Border, WatermarkColor = Theme.Current.TextSecondary,
+        // 只读态走独立颜色：不设则边框回落成库默认亮色
+        FillReadOnlyColor = Theme.Current.InputBg, ForeReadOnlyColor = Theme.Current.TextPrimary,
+        RectReadOnlyColor = Theme.Current.Border
     };
     private readonly Dictionary<int, Queue<double>> _tempSeries = new();
     private readonly Dictionary<int, (double temp, double vib, DateTime ts, bool alarm)> _health = new();
@@ -37,7 +46,7 @@ internal class UcIoT : UserControl, IRefreshable
 
     public UcIoT()
     {
-        var top = new Panel { Dock = DockStyle.Top, Height = 50 };
+        var top = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = Theme.Current.PageBg };
         _btnStart = Ui.Btn("启动网关", 700, 10, 100, 32);
         _btnStart.Click += OnToggle;
         var tip = new UILabel
@@ -48,11 +57,16 @@ internal class UcIoT : UserControl, IRefreshable
         };
         top.Controls.AddRange(new Control[] { _lblStatus, _btnStart, tip });
 
-        var chartHost = new UIPanel { Dock = DockStyle.Top, Height = 260, Text = "" };
+        var chartHost = new UIPanel
+        {
+            Dock = DockStyle.Top, Height = 260, Text = "", StyleCustomMode = true,
+            FillColor = Theme.Current.CardBg, RectColor = Theme.Current.Border
+        };
         var chartHead = new UILabel
         {
             Dock = DockStyle.Top, Height = 26, Font = new Font("微软雅黑", 9.5F, FontStyle.Bold),
-            Text = "  实时温度曲线（点击下表设备切换）", TextAlign = ContentAlignment.MiddleLeft
+            Text = "  实时温度曲线（点击下表设备切换）", TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = Theme.Current.TextPrimary
         };
         _chart.Dock = DockStyle.Fill;
         chartHost.Controls.Add(_chart);
@@ -60,7 +74,9 @@ internal class UcIoT : UserControl, IRefreshable
 
         var split = new SplitContainer
         {
-            Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 200
+            // 初始尺寸不足时 SplitterDistance 会被钳制，Dock 后无法恢复（与 UcDevices 同因）
+            Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, Size = new Size(1200, 600),
+            SplitterDistance = 200
         };
         var gridHost = new Panel { Dock = DockStyle.Fill };
         _gridHealth.Dock = DockStyle.Fill;
@@ -108,6 +124,7 @@ internal class UcIoT : UserControl, IRefreshable
                 if (!_health.ContainsKey(d.DeviceId))
                     _health[d.DeviceId] = (0, 0, DateTime.MinValue, false);
             RenderHealth();
+            RedrawChart();   // 进页即清掉 SunnyUI 内置演示波形
         }
         catch (Exception ex) { Ui.Error(DAL.DbHelper.FriendlyError(ex)); }
     }
@@ -171,13 +188,19 @@ internal class UcIoT : UserControl, IRefreshable
 
     private void RedrawChart()
     {
-        if (!_tempSeries.TryGetValue(_selectedDevice, out var q) || q.Count == 0) return;
         try
         {
             var option = new UILineOption();
+            option.Title.Text = "";
             var series = option.AddSeries("温度℃", false);
-            int i = 0;
-            foreach (var v in q) series.Add($"T{++i}", v);
+            series.CustomColor = true;
+            series.Color = Theme.Current.Cyan;
+            if (_tempSeries.TryGetValue(_selectedDevice, out var q) && q.Count > 0)
+            {
+                int i = 0;
+                foreach (var v in q) series.Add($"T{++i}", v);
+            }
+            // 无数据也下发空 Option：否则图表停留在 SunnyUI 内置演示波形
             _chart.SetOption(option);
             _chart.Refresh();
         }

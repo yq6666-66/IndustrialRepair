@@ -60,7 +60,8 @@ internal class UcDevices : UserControl, IRefreshable
 
         var split = new SplitContainer
         {
-            Dock = DockStyle.Fill, Orientation = Orientation.Vertical,
+            // 必须先给足初始尺寸：默认 150×100 下设 SplitterDistance=420 会被钳到约 125，Dock 后无法恢复
+            Dock = DockStyle.Fill, Orientation = Orientation.Vertical, Size = new Size(1200, 600),
             SplitterDistance = 420, FixedPanel = FixedPanel.Panel1
         };
         split.Panel1.Controls.Add(left);

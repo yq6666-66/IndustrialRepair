@@ -19,20 +19,26 @@ internal class UcSerial : UserControl, IRefreshable
     private readonly PartService _parts = new();
     private IScannerInput? _active;              // 当前扫码输入源（接口类型，切换即换实现）
     private SerialScannerInput? _serialInput;    // 保留引用：测试帧发送仅串口源支持
-    private readonly UIComboBox _cmbPort = Ui.Combo(90, 12, 140);
-    private readonly UIComboBox _cmbBaud = Ui.Combo(250, 12, 100);
-    private readonly UIButton _btnOpen = Ui.Btn("打开串口", 370, 10, 100, 32);
-    private readonly UIButton _btnSim = Ui.Btn("启动扫码模拟器", 490, 10, 140, 32);
-    private readonly UITextBox _txtManual = Ui.Txt("直接输入配件编码，如 P-ZC-001", 120, 56, 220);
+    // 第一行坐标按「标签→控件→标签→控件→按钮」顺序排布，避免标签压住前一个下拉框
+    private readonly UIComboBox _cmbPort = Ui.Combo(78, 12, 140);
+    private readonly UIComboBox _cmbBaud = Ui.Combo(306, 12, 100);
+    private readonly UIButton _btnOpen = Ui.Btn("打开串口", 414, 10, 100, 32);
+    private readonly UIButton _btnSim = Ui.Btn("启动扫码模拟器", 522, 10, 140, 32);
+    private readonly UITextBox _txtManual = Ui.Txt("直接输入配件编码，如 P-ZC-001", 102, 56, 220);
     private readonly UITextBox _log = new()
     {
         Location = new Point(10, 100), Size = new Size(700, 560), Multiline = true,
-        ReadOnly = true, Font = new Font("Consolas", 9F), Watermark = "接收帧日志…"
+        ReadOnly = true, Font = new Font("Consolas", 9F), Watermark = "接收帧日志…",
+        StyleCustomMode = true, FillColor = Theme.Current.InputBg, ForeColor = Theme.Current.TextPrimary,
+        RectColor = Theme.Current.Border, WatermarkColor = Theme.Current.TextSecondary,
+        // 只读态走独立颜色：不设则边框回落成库默认亮色
+        FillReadOnlyColor = Theme.Current.InputBg, ForeReadOnlyColor = Theme.Current.TextPrimary,
+        RectReadOnlyColor = Theme.Current.Border
     };
     private readonly UILabel _lblPart = new()
     {
         Location = new Point(730, 100), Size = new Size(440, 300), AutoSize = false,
-        BackColor = Color.FromArgb(245, 248, 252),
+        BackColor = Theme.Current.CardBg, ForeColor = Theme.Current.TextPrimary,
         Font = new Font("微软雅黑", 10F), Text = "扫码后将显示配件信息\n\n协议帧示例：PART:P-ZC-001"
     };
 
@@ -43,27 +49,27 @@ internal class UcSerial : UserControl, IRefreshable
 
         _btnOpen.Click += OnOpen;
         _btnSim.Click += OnSim;
-        var btnManual = Ui.Btn("查询", 350, 54, 70, 28, (_, _) =>
+        var btnManual = Ui.Btn("查询", 330, 54, 70, 28, (_, _) =>
         {
             var code = _txtManual.Text.Trim();
             if (code.Length == 0) { Ui.Error("请输入配件编码。"); return; }
             AppendLog("[手动录入] " + code);
             LookupPart(code);                       // 与扫码帧同一条查询流程
         });
-        var btnSend = Ui.Btn("发送测试帧", 650, 10, 100, 32, (_, _) =>
+        var btnSend = Ui.Btn("发送测试帧", 670, 10, 100, 32, (_, _) =>
         {
             if (_serialInput is not { IsActive: true }) { Ui.Error("请先打开串口。"); return; }
             try { _serialInput.Send("PING"); AppendLog(">> PING"); }
             catch (Exception ex) { Ui.Error(ex.Message); }
         });
-        var btnScanImg = Ui.Btn("从图片扫码", 760, 10, 100, 32, OnScanImage);
+        var btnScanImg = Ui.Btn("从图片扫码", 778, 10, 100, 32, OnScanImage);
 
         Controls.AddRange(new Control[]
         {
-            Ui.Lbl("串口：", 10, 14, 76), _cmbPort,
-            Ui.Lbl("波特率：", 200, 14, 50), _cmbBaud,
+            Ui.Lbl("串口：", 10, 14, 64), _cmbPort,
+            Ui.Lbl("波特率：", 226, 14, 76), _cmbBaud,
             _btnOpen, _btnSim, btnSend, btnScanImg,
-            Ui.Lbl("手动录入：", 40, 58, 76), _txtManual, btnManual,
+            Ui.Lbl("手动录入：", 10, 58, 88), _txtManual, btnManual,
             _log, _lblPart
         });
         Disposed += (_, _) => StopSource();

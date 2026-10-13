@@ -117,9 +117,21 @@ internal class UcDashboard : UserControl, IRefreshable
         return row;
     }
 
+    /// <summary>工单状态 → 主题语义色（柱图逐项着色）。</summary>
+    private static Color StatusColor(string statusCode) => statusCode switch
+    {
+        OrderStatusCode.Pending => Theme.Current.Warning,
+        OrderStatusCode.Assigned => Theme.Current.Cyan,
+        OrderStatusCode.Working => Theme.Current.Accent,
+        OrderStatusCode.Done => Theme.Current.Success,
+        OrderStatusCode.Cancelled => Theme.Current.TextSecondary,
+        _ => Theme.Current.Accent
+    };
+
     /// <summary>图表统一切到 SunnyUI 深色样式，坐标与边框取主题色。</summary>
     private static T DarkChart<T>(T chart) where T : UIChart
     {
+        Ui.ApplyChartPalette();
         chart.Dock = DockStyle.Fill;
         chart.ChartStyleType = UIChartStyleType.Dark;
         chart.ForeColor = Theme.Current.TextSecondary;
@@ -148,9 +160,10 @@ internal class UcDashboard : UserControl, IRefreshable
 
     private static Control GridHost(Control grid)
     {
+        // 注意：Dock=Fill 之后再设 Anchor 会把 Dock 重置回 None（控件退化成创建尺寸）——
+        // 低库存表曾因此缩成 100×100 小方块，此处只保留 Dock。
         var p = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Current.CardBg };
         grid.Dock = DockStyle.Fill;
-        grid.Anchor = AnchorStyles.None;
         p.Controls.Add(grid);
         return p;
     }
@@ -237,40 +250,74 @@ internal class UcDashboard : UserControl, IRefreshable
         string[] vals = { summary.today.ToString(), summary.pending.ToString(), summary.working.ToString(), summary.done.ToString(), summary.cost.ToString("N2"), summary.stockValue.ToString("N2") };
         for (int i = 0; i < 6; i++) _cardValues[i].Text = vals[i];
 
+        // 柱图手工建 Option：series.AddData(名, 值, 色) 的逐项颜色会覆盖样式默认色（SunnyUI 源码：series.Colors[j] 优先）。
         var status = rows.Where(r => r.Kind == "状态分布").ToList();
+        var optStatus = new UIBarOption();
+        optStatus.Title.Text = "工单状态分布";
+        var seriesStatus = new UIBarSeries(0) { Name = "工单状态分布" };
         if (status.Count > 0)
-            _barStatus.ShowData(
-                status.Select(r => OrderStatusCode.ToChinese(r.Label)).ToArray(),
-                status.Select(r => (double)r.Val).ToArray(), "工单状态分布");
-
-        // 近 7 日双系列：报修工单数（左轴）+ 出库成本（右轴，R3）
-        var trend = rows.Where(r => r.Kind == "近7日工单").OrderBy(r => r.Label).ToList();
-        var costTrend = rows.Where(r => r.Kind == "近7日成本")
-                            .OrderBy(r => r.Label).ToDictionary(r => r.Label, r => r.Val);
-        if (trend.Count > 0)
         {
-            var option = new UILineOption();
-            var series = option.AddSeries("报修工单数", false);
-            var costSeries = option.AddSeries("出库成本(元)", true);
-            series.CustomColor = true;
-            series.Color = Theme.Current.Accent;
-            costSeries.CustomColor = true;
-            costSeries.Color = Theme.Current.Warning;
-            foreach (var r in trend)
+            foreach (var r in status)
             {
-                var label = r.Label.Length > 5 ? r.Label[5..] : r.Label;
-                series.Add(label, r.Val);
-                costSeries.Add(label, costTrend.TryGetValue(r.Label, out var c) ? c : 0);
+                var label = OrderStatusCode.ToChinese(r.Label);
+                optStatus.XAxis.Data.Add(label);
+                seriesStatus.AddData(label, (double)r.Val, StatusColor(r.Label));
             }
-            _lineTrend.SetOption(option);
-            _lineTrend.Refresh();
         }
+        else
+        {
+            optStatus.XAxis.Data.Add("暂无数据");
+            seriesStatus.AddData("暂无数据", 0, Theme.Current.TextSecondary);
+        }
+        optStatus.AddSeries(seriesStatus);
+        _barStatus.SetOption(optStatus);
+        _barStatus.Refresh();
+
+        // 近 7 日双系列：报修工单数（左轴）+ 出库成本（右轴，R3）。
+        // 标签在客户端固定生成最近 7 天，缺数补 0——即使库中无数据也画出正确的时间轴。
+        var trendMap = rows.Where(r => r.Kind == "近7日工单").ToDictionary(r => r.Label, r => r.Val);
+        var costMap = rows.Where(r => r.Kind == "近7日成本").ToDictionary(r => r.Label, r => r.Val);
+        var option = new UILineOption { XAxisType = UIAxisType.DateTime };
+        option.Title.Text = "";
+        var series = option.AddSeries("报修工单数", false);
+        var costSeries = option.AddSeries("出库成本(元)", true);
+        series.CustomColor = true;
+        series.Color = Theme.Current.Accent;
+        series.XAxisDateTimeFormat = "MM-dd";
+        costSeries.CustomColor = true;
+        costSeries.Color = Theme.Current.Warning;
+        costSeries.XAxisDateTimeFormat = "MM-dd";
+        for (int i = 6; i >= 0; i--)
+        {
+            var day = DateTime.Today.AddDays(-i);
+            var key = day.ToString("yyyy-MM-dd");
+            series.Add(day, trendMap.TryGetValue(key, out var v) ? v : 0);
+            costSeries.Add(day, costMap.TryGetValue(key, out var c) ? c : 0);
+        }
+        _lineTrend.SetOption(option);
+        _lineTrend.Refresh();
 
         var rank = rows.Where(r => r.Kind == "工程师完工").OrderByDescending(r => r.Val).ToList();
+        var optRank = new UIBarOption();
+        optRank.Title.Text = "工程师完工排行";
+        var seriesRank = new UIBarSeries(0) { Name = "工程师完工排行" };
+        var palette = new[] { Theme.Current.Accent, Theme.Current.Cyan, Theme.Current.Violet, Theme.Current.Success, Theme.Current.Warning };
         if (rank.Count > 0)
-            _barEngineer.ShowData(
-                rank.Select(r => r.Label).ToArray(),
-                rank.Select(r => (double)r.Val).ToArray(), "工程师完工排行");
+        {
+            for (int i = 0; i < rank.Count; i++)
+            {
+                optRank.XAxis.Data.Add(rank[i].Label);
+                seriesRank.AddData(rank[i].Label, (double)rank[i].Val, palette[i % palette.Length]);
+            }
+        }
+        else
+        {
+            optRank.XAxis.Data.Add("暂无数据");
+            seriesRank.AddData("暂无数据", 0, Theme.Current.TextSecondary);
+        }
+        optRank.AddSeries(seriesRank);
+        _barEngineer.SetOption(optRank);
+        _barEngineer.Refresh();
 
         low.Columns["Gap"]!.ColumnName = "缺口";
         foreach (var col in new[] { "PartCode", "PartName", "Spec", "Unit", "StockQty", "MinStock", "CategoryName" })

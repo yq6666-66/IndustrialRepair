@@ -78,7 +78,12 @@ internal class UcMaintenance : UserControl, IRefreshable
         eToolbar.Controls.Add(lblE);
         eToolbar.Controls.Add(btnStockIn);
         eToolbar.Controls.Add(btnExportChart);
-        var eoqSplit = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 350 };
+        var eoqSplit = new SplitContainer
+        {
+            // 初始尺寸不足时 SplitterDistance 会被钳制，Dock 后无法恢复（与 UcDevices 同因）
+            Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, Size = new Size(1200, 600),
+            SplitterDistance = 350
+        };
         eoqSplit.Panel1.Controls.Add(_gridEOQ);
         eoqSplit.Panel2.Controls.Add(_plot);   // ScottPlot 交互图表
         tabEOQ.Controls.Add(eoqSplit);
@@ -246,17 +251,38 @@ internal class UcMaintenance : UserControl, IRefreshable
             new GridCol("需订购", "需订购", FillWeight: 55),
             new GridCol("建议", "建议", FillWeight: 220));
 
-        // ScottPlot：消耗量柱状图
+        // ScottPlot：消耗量柱状图（深色主题）
         _plot.Plot.Clear();
         var codes = recs.Select(r => r.PartCode).ToArray();
         var qtys = recs.Select(r => r.AnnualDemandQty).Select(q => (double)q).ToArray();
         var bar = _plot.Plot.Add.Bars(qtys);
+        bar.Color = Sp(Theme.Current.Accent);
         _plot.Plot.Axes.Bottom.TickGenerator = new ScottPlot.TickGenerators.NumericManual(
             Enumerable.Range(0, codes.Length).Select(i => new ScottPlot.Tick(i, codes[i])).ToArray());
+        ApplyPlotTheme();
         _plot.Plot.Title("年消耗量（EOQ 分析）");
         _plot.Plot.YLabel("数量");
         _plot.Refresh();
     }
+
+    /// <summary>ScottPlot 深色配色：画布/绘图区/网格/坐标轴/标题与轴标签。</summary>
+    private void ApplyPlotTheme()
+    {
+        var t = Theme.Current;
+        _plot.Plot.FigureBackground.Color = Sp(t.CardBg);
+        _plot.Plot.DataBackground.Color = Sp(t.CardBg);
+        _plot.Plot.Grid.MajorLineColor = Sp(t.Border);
+        _plot.Plot.Grid.MinorLineColor = Sp(t.GridAltRow);
+        _plot.Plot.Axes.Color(Sp(t.TextSecondary));
+        _plot.Plot.Axes.FrameColor(Sp(t.Border));
+        _plot.Plot.Axes.Title.Label.ForeColor = Sp(t.TextPrimary);
+        _plot.Plot.Axes.Bottom.Label.ForeColor = Sp(t.TextSecondary);
+        _plot.Plot.Axes.Left.Label.ForeColor = Sp(t.TextSecondary);
+        // SkiaSharp 默认字体不含 CJK：不指定则中文标题渲染成方块
+        _plot.Plot.Font.Set("微软雅黑");
+    }
+
+    private static ScottPlot.Color Sp(Color c) => new(c.R, c.G, c.B, c.A);
 
     private void LoadVendors()
     {

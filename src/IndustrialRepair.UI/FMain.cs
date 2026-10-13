@@ -47,6 +47,10 @@ public class FMain : UIForm
         StyleCustomMode = true;
         BackColor = Theme.Current.PageBg;
         ForeColor = Theme.Current.TextPrimary;
+        // 窗体自带标题栏（SunnyUI 自绘）也换到深色体系，避免顶部残留库默认蓝
+        TitleColor = Theme.Current.HeaderBar;
+        TitleForeColor = Theme.Current.TextPrimary;
+        RectColor = Theme.Current.Border;
 
         // ---- 顶部标题栏：标题 + 当前模块 + 用户区（右侧自适应窗口宽度） ----
         // 用普通 Panel 而非 UIPanel：SunnyUI UILabel 在 UIPanel 上底色会发白（导航/状态栏所在普通 Panel 无此问题）

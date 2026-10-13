@@ -88,7 +88,11 @@ internal class UcPicking : UserControl, IRefreshable
         bottom.Controls.Add(lblItems);
 
         var split = new SplitContainer
-        { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 320, Panel1MinSize = 160, Panel2MinSize = 160 };
+        {
+            // 先给足初始尺寸，否则构造期设 MinSize/SplitterDistance 会因为默认 150×100 触发校验异常
+            Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, Size = new Size(1200, 600),
+            Panel1MinSize = 160, Panel2MinSize = 160, SplitterDistance = 320
+        };
         split.Panel1.Controls.Add(top);
         split.Panel2.Controls.Add(bottom);
 

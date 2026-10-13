@@ -65,6 +65,10 @@ public class FLogin : UILoginForm
         LoginText = "账号登录";
 
         _txtCaptcha = Ui.Txt("验证码", 4, 6, 102);
+        _txtCaptcha.FillColor = Color.White;
+        _txtCaptcha.ForeColor = Color.FromArgb(32, 41, 56);
+        _txtCaptcha.RectColor = Color.FromArgb(200, 206, 214);
+        _txtCaptcha.WatermarkColor = Color.FromArgb(130, 140, 155);
         _picCaptcha.Location = new Point(110, 6);
         _lblSlot.Location = new Point(4, 40);
         _extCard.Controls.Add(_txtCaptcha);

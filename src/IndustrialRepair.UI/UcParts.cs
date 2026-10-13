@@ -108,7 +108,7 @@ internal class UcParts : UserControl, IRefreshable
         var toolbar = Ui.Toolbar();
         toolbar.Controls.AddRange(new Control[]
         {
-            Ui.Lbl("关键字：", 4, 14, 80), _txtKey, Ui.Lbl("类别：", 346, 14, 48), _cmbCat,
+            Ui.Lbl("关键字：", 4, 14, 80), _txtKey, Ui.Lbl("类别：", 0, 0, 64), _cmbCat,
             btnQuery, btnAdd, btnEdit, btnDel, btnIn, btnLow, btnLog, btnQr, btnXls, btnPdf, btnImport, btnLabels, btnAdjust, btnSelAll, btnBatchDel
         });
 

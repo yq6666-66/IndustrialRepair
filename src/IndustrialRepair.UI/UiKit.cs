@@ -127,6 +127,29 @@ internal static class Ui
         c.WatermarkActiveColor = t.TextSecondary;
     }
 
+    private static bool _chartPaletteApplied;
+
+    /// <summary>
+    /// 图表系列色板：SunnyUI 的深色图表样式是共享单例，启动期一次性把系列色换成
+    /// 电光蓝主题色序（电光蓝→青→琥珀→绿→紫→辉光），柱图不再出现默认鲑红。
+    /// </summary>
+    public static void ApplyChartPalette()
+    {
+        if (_chartPaletteApplied) return;
+        _chartPaletteApplied = true;
+        try
+        {
+            var t = Theme.Current;
+            var palette = new[]
+            {
+                t.Accent, t.Cyan, t.Warning, t.Success, t.Violet, t.Glow, t.Danger, t.TextSecondary
+            };
+            var colors = UIChartStyles.GetChartStyle(UIChartStyleType.Dark).SeriesColor;
+            for (int i = 0; i < colors.Length; i++) colors[i] = palette[i % palette.Length];
+        }
+        catch { /* 样式 API 变化时退回库默认色，不影响功能 */ }
+    }
+
     /// <summary>对话框主题：标题栏、窗体底与关闭按钮统一到深色体系。</summary>
     public static void ApplyDialogTheme(UIForm f)
     {
