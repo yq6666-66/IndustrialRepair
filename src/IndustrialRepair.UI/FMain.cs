@@ -329,6 +329,11 @@ public class FMain : UIForm
             Ui.Busy(page.RefreshData);
             return true;
         }
+        if (keyData == Keys.F11 && _content.Controls.Count > 0 && _content.Controls[0] is UcDashboard dashboard)
+        {
+            dashboard.ToggleFullscreen();
+            return true;
+        }
         if (keyData == (Keys.Control | Keys.K))
         {
             using var dlg = new FGlobalSearch(_user, ShowPage);

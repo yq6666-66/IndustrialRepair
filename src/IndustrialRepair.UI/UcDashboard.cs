@@ -16,10 +16,10 @@ namespace IndustrialRepair.UI;
 internal class UcDashboard : UserControl, IRefreshable
 {
     private readonly DashboardService _svc = new();
-    private readonly Label[] _cards = new Label[6];
-    private readonly UIBarChart _barStatus = new() { Dock = DockStyle.Fill };
-    private readonly UILineChart _lineTrend = new() { Dock = DockStyle.Fill };
-    private readonly UIBarChart _barEngineer = new() { Dock = DockStyle.Fill };
+    private readonly UILabel[] _cardValues = new UILabel[6];
+    private readonly UIBarChart _barStatus = DarkChart(new UIBarChart());
+    private readonly UILineChart _lineTrend = DarkChart(new UILineChart());
+    private readonly UIBarChart _barEngineer = DarkChart(new UIBarChart());
     private readonly UIDataGridView _gridLow = Ui.Grid(0, 0, 100, 100);
     private readonly System.Windows.Forms.Timer _autoTimer = new();
     private UIButton _btnAuto = null!;
@@ -28,7 +28,8 @@ internal class UcDashboard : UserControl, IRefreshable
     public UcDashboard()
     {
         // ---- 汇总卡片（6 张：含 R3 库存总价值）+ CSV 导出 + 自动刷新 + 全屏（OR4）----
-        var top = new Panel { Dock = DockStyle.Top, Height = 86, Padding = new Padding(6) };
+        var top = new Panel { Dock = DockStyle.Top, Height = 86, Padding = new Padding(6), BackColor = Theme.Current.PageBg };
+        top.Controls.Add(BuildCards());   // Fill 先加入，后加入的按钮 Dock.Right 先停靠
         var btnCsv = Ui.Btn("导出CSV\n(大屏数据源)", 0, 0, 118, 60);
         btnCsv.Dock = DockStyle.Right;
         btnCsv.Font = new Font("微软雅黑", 8.5F);
@@ -61,30 +62,9 @@ internal class UcDashboard : UserControl, IRefreshable
         _autoTimer.Tick += (_, _) => SafeRefreshAsync();
         Disposed += (_, _) => { _autoTimer.Stop(); _autoTimer.Dispose(); };
 
-        // F11 切换全屏（OR4）
-        var parentForm = FindForm();
-        if (parentForm != null)
-            parentForm.KeyDown += (_, e) => { if (e.KeyCode == Keys.F11 && Visible) ToggleFullscreen(); };
-        string[] names = { "今日工单", "待派单", "维修中", "已完成", "本月材料成本(元)", "库存总价值(元)" };
-        for (int i = 0; i < 6; i++)
-        {
-            var card = new Label
-            {
-                Text = $"{names[i]}\n--",
-                Dock = DockStyle.Left, Width = (1180 - 40) / 6,
-                Font = new Font("微软雅黑", 10.5F, FontStyle.Bold),
-                BackColor = i switch { 1 => Color.FromArgb(230, 162, 60), 2 => Color.FromArgb(48, 116, 222), 3 => Color.FromArgb(80, 160, 90), 4 => Color.FromArgb(130, 90, 160), 5 => Color.FromArgb(160, 110, 60), _ => Color.FromArgb(70, 130, 200) },
-                ForeColor = Color.White, TextAlign = ContentAlignment.MiddleCenter, Margin = new Padding(4)
-            };
-            _cards[i] = card;
-            top.Controls.Add(card);
-        }
-        // 反转 Dock.Left 添加顺序
-        for (int i = 0; i < top.Controls.Count; i++) top.Controls[i].BringToFront();
-
         // ---- 图表区 ----
-        var body = new Panel { Dock = DockStyle.Fill, Padding = new Padding(6) };
-        var table = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2 };
+        var body = new Panel { Dock = DockStyle.Fill, Padding = new Padding(6), BackColor = Theme.Current.PageBg };
+        var table = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, BackColor = Theme.Current.PageBg };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
         table.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
@@ -100,13 +80,65 @@ internal class UcDashboard : UserControl, IRefreshable
         Controls.Add(top);
     }
 
+    /// <summary>6 张 KPI 卡：深色卡片 + 左侧状态色条 + 电光数值，6 列等分随窗口伸缩。</summary>
+    private TableLayoutPanel BuildCards()
+    {
+        var t = Theme.Current;
+        var row = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6, RowCount = 1, BackColor = t.PageBg, Margin = new Padding(0) };
+        for (int i = 0; i < 6; i++) row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / 6));
+        row.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        string[] names = { "今日工单", "待派单", "维修中", "已完成", "本月材料成本(元)", "库存总价值(元)" };
+        Color[] accents = { t.Accent, t.Warning, t.Cyan, t.Success, t.Violet, t.Glow };
+        for (int i = 0; i < 6; i++)
+        {
+            var card = new UIPanel
+            {
+                Dock = DockStyle.Fill, Margin = new Padding(4), Radius = 8,
+                StyleCustomMode = true, FillColor = t.CardBg, RectColor = t.Border
+            };
+            var value = new UILabel
+            {
+                Text = "--", Dock = DockStyle.Fill, Padding = new Padding(12, 0, 0, 6),
+                Font = new Font("微软雅黑", 16F, FontStyle.Bold), ForeColor = accents[i],
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            var name = new UILabel
+            {
+                Text = names[i], Dock = DockStyle.Top, Height = 28, Padding = new Padding(12, 6, 0, 0),
+                Font = new Font("微软雅黑", 9F), ForeColor = t.LabelColor
+            };
+            var strip = new Panel { Dock = DockStyle.Left, Width = 4, BackColor = accents[i] };
+            _cardValues[i] = value;
+            card.Controls.Add(value);
+            card.Controls.Add(name);
+            card.Controls.Add(strip);
+            row.Controls.Add(card, i, 0);
+        }
+        return row;
+    }
+
+    /// <summary>图表统一切到 SunnyUI 深色样式，坐标与边框取主题色。</summary>
+    private static T DarkChart<T>(T chart) where T : UIChart
+    {
+        chart.Dock = DockStyle.Fill;
+        chart.ChartStyleType = UIChartStyleType.Dark;
+        chart.ForeColor = Theme.Current.TextSecondary;
+        chart.RectColor = Theme.Current.Border;
+        return chart;
+    }
+
     private static Control PanelOf(string title, Control inner)
     {
-        var p = new UIPanel { Dock = DockStyle.Fill, Margin = new Padding(4), Radius = 8 };
+        var p = new UIPanel
+        {
+            Dock = DockStyle.Fill, Margin = new Padding(4), Radius = 8,
+            StyleCustomMode = true, FillColor = Theme.Current.CardBg, RectColor = Theme.Current.Border
+        };
         var head = new UILabel
         {
             Text = title, Dock = DockStyle.Top, Height = 30, Font = new Font("微软雅黑", 10F, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(8, 6, 0, 0)
+            TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(8, 6, 0, 0),
+            ForeColor = Theme.Current.TextPrimary
         };
         inner.Dock = DockStyle.Fill;
         p.Controls.Add(inner);
@@ -116,7 +148,7 @@ internal class UcDashboard : UserControl, IRefreshable
 
     private static Control GridHost(Control grid)
     {
-        var p = new Panel { Dock = DockStyle.Fill };
+        var p = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Current.CardBg };
         grid.Dock = DockStyle.Fill;
         grid.Anchor = AnchorStyles.None;
         p.Controls.Add(grid);
@@ -164,28 +196,22 @@ internal class UcDashboard : UserControl, IRefreshable
         });
     }
 
-    /// <summary>全屏切换（OR4：大屏页独占显示器，再按 F11/按钮恢复）。</summary>
-    private void ToggleFullscreen()
+    /// <summary>全屏切换（OR4：大屏页独占显示器，再按 F11/按钮恢复；导航显隐随状态机同步还原）。</summary>
+    public void ToggleFullscreen()
     {
         var form = FindForm();
         if (form == null) return;
-        if (form.FormBorderStyle == FormBorderStyle.None)
-        {
-            form.FormBorderStyle = FormBorderStyle.Sizable;
-            form.WindowState = FormWindowState.Maximized;
-            form.TopMost = false;
-        }
-        else
-        {
-            form.FormBorderStyle = FormBorderStyle.None;
-            form.WindowState = FormWindowState.Maximized;
-            form.TopMost = true;
-            // 隐藏侧边导航（仅大屏内容可见）
-            foreach (Control c in form.Controls)
-                if (c is Panel p && p.Dock == DockStyle.Left && p.Width <= 220)
-                    p.Visible = false;
-        }
+        var current = new DashboardFullscreen.State(form.FormBorderStyle == FormBorderStyle.None, NavPanels(form).All(p => p.Visible));
+        var next = DashboardFullscreen.Toggle(current);
+        form.FormBorderStyle = next.Fullscreen ? FormBorderStyle.None : FormBorderStyle.Sizable;
+        form.WindowState = FormWindowState.Maximized;
+        form.TopMost = next.Fullscreen;
+        foreach (var nav in NavPanels(form)) nav.Visible = next.NavVisible;
     }
+
+    /// <summary>主窗体左侧导航面板（宽度 ≤220 的左停靠 Panel）。</summary>
+    private static IEnumerable<Panel> NavPanels(Control form) =>
+        form.Controls.OfType<Panel>().Where(p => p.Dock == DockStyle.Left && p.Width <= 220);
 
     public void RefreshData()
     {
@@ -209,8 +235,7 @@ internal class UcDashboard : UserControl, IRefreshable
         System.Data.DataTable low)
     {
         string[] vals = { summary.today.ToString(), summary.pending.ToString(), summary.working.ToString(), summary.done.ToString(), summary.cost.ToString("N2"), summary.stockValue.ToString("N2") };
-        for (int i = 0; i < 6; i++)
-            _cards[i].Text = $"{_cards[i].Text.Split('\n')[0]}\n{vals[i]}";
+        for (int i = 0; i < 6; i++) _cardValues[i].Text = vals[i];
 
         var status = rows.Where(r => r.Kind == "状态分布").ToList();
         if (status.Count > 0)
@@ -227,6 +252,10 @@ internal class UcDashboard : UserControl, IRefreshable
             var option = new UILineOption();
             var series = option.AddSeries("报修工单数", false);
             var costSeries = option.AddSeries("出库成本(元)", true);
+            series.CustomColor = true;
+            series.Color = Theme.Current.Accent;
+            costSeries.CustomColor = true;
+            costSeries.Color = Theme.Current.Warning;
             foreach (var r in trend)
             {
                 var label = r.Label.Length > 5 ? r.Label[5..] : r.Label;
@@ -261,4 +290,13 @@ internal class UcDashboard : UserControl, IRefreshable
             new GridCol("缺口", "缺口", FillWeight: 55),
             new GridCol("类别", "类别", FillWeight: 70));
     }
+}
+
+/// <summary>大屏全屏状态机（纯函数）：进入全屏隐藏导航，退出全屏必须还原。</summary>
+public static class DashboardFullscreen
+{
+    public readonly record struct State(bool Fullscreen, bool NavVisible);
+
+    public static State Toggle(State current) =>
+        current.Fullscreen ? new State(false, true) : new State(true, false);
 }
