@@ -20,7 +20,10 @@ public class FMain : UIForm
     private readonly UserInfo _user;
     private readonly Dictionary<string, UserControl> _pages = new();
     private readonly Dictionary<string, UIButton> _navButtons = new();
-    private readonly Panel _content = new() { Dock = DockStyle.Fill, Padding = new Padding(10) };
+    private readonly Panel _content = new() { Dock = DockStyle.Fill, Padding = new Padding(10), BackColor = Theme.Current.PageBg };
+    private readonly Panel _navBar;
+    private readonly System.Windows.Forms.Timer _healthTimer = new();
+    private bool _healthBusy;
     private readonly UILabel _lblUser;
     private readonly UILabel _lblPage;
     private readonly UILabel _lblClock;
@@ -41,26 +44,29 @@ public class FMain : UIForm
         MinimumSize = new Size(1024, 600);   // R30：防止窗口过小导致按钮不可达
         StartPosition = FormStartPosition.CenterScreen;
         WindowState = FormWindowState.Maximized;
+        StyleCustomMode = true;
+        BackColor = Theme.Current.PageBg;
+        ForeColor = Theme.Current.TextPrimary;
 
         // ---- 顶部标题栏：标题 + 当前模块 + 用户区（右侧自适应窗口宽度） ----
         // 用普通 Panel 而非 UIPanel：SunnyUI UILabel 在 UIPanel 上底色会发白（导航/状态栏所在普通 Panel 无此问题）
         var header = new Panel { Dock = DockStyle.Top, Height = 64, BackColor = Theme.Current.HeaderBar };
         var title = new UILabel
         {
-            Text = "工业维修智能化零件分配平台", ForeColor = Color.White, BackColor = Color.Transparent,
+            Text = "工业维修智能化零件分配平台", ForeColor = Theme.Current.TextPrimary, BackColor = Color.Transparent,
             Font = new Font("微软雅黑", 13F, FontStyle.Bold),
             Location = new Point(18, 18), Size = new Size(360, 30), AutoSize = false
         };
         _lblPage = new UILabel
         {
-            ForeColor = Color.FromArgb(205, 226, 255), BackColor = Color.Transparent,
+            ForeColor = Theme.Current.Cyan, BackColor = Color.Transparent,
             Font = new Font("微软雅黑", 10.5F),
             Location = new Point(388, 21), Size = new Size(340, 24), AutoSize = false
         };
         _lblUser = new UILabel
         {
             Text = $"{user.RealName}（{user.RoleName}）  ·  权限 {user.Permissions.Count} 项",
-            ForeColor = Color.White, BackColor = Color.Transparent, Font = new Font("微软雅黑", 9.5F),
+            ForeColor = Theme.Current.TextSecondary, BackColor = Color.Transparent, Font = new Font("微软雅黑", 9.5F),
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
             Location = new Point(ClientSize.Width - 480, 20), Size = new Size(280, 24),
             AutoSize = false, TextAlign = ContentAlignment.MiddleRight
@@ -68,17 +74,19 @@ public class FMain : UIForm
         _header = header;
         var btnPwd = new UIButton
         {
-            Text = "修改密码", ForeColor = Color.White, FillColor = Color.FromArgb(41, 108, 202),
-            RectColor = Color.FromArgb(160, 200, 245), Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            Text = "修改密码", Anchor = AnchorStyles.Top | AnchorStyles.Right,
             Location = new Point(ClientSize.Width - 190, 16), Size = new Size(86, 32), Cursor = Cursors.Hand
         };
+        Ui.StyleButton(btnPwd);
         btnPwd.Click += (_, _) => new FChangePwd(_user.UserId).ShowDialog();
         var btnLogout = new UIButton
         {
-            Text = "退出登录", ForeColor = Color.White, FillColor = Color.FromArgb(214, 69, 66),
-            RectColor = Color.White, Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            Text = "退出登录", Anchor = AnchorStyles.Top | AnchorStyles.Right,
             Location = new Point(ClientSize.Width - 96, 16), Size = new Size(86, 32), Cursor = Cursors.Hand
         };
+        Ui.StyleButton(btnLogout);
+        btnLogout.RectColor = btnLogout.RectHoverColor = Theme.Current.Danger;
+        btnLogout.ForeColor = btnLogout.ForeHoverColor = btnLogout.ForePressColor = Theme.Current.Danger;
         btnLogout.Click += (_, _) =>
         {
             if (!Ui.Ask("确定退出登录？")) return;
@@ -89,7 +97,9 @@ public class FMain : UIForm
         header.Controls.AddRange(new Control[] { title, _lblPage, _lblUser, btnPwd, btnLogout });
 
         // ---- 左侧分组导航（按权限显隐） ----
-        var nav = new Panel { Dock = DockStyle.Left, Width = 200, BackColor = Color.FromArgb(32, 41, 56) };
+        var nav = new Panel { Dock = DockStyle.Left, Width = 200, BackColor = Theme.Current.NavBg };
+        _navBar = new Panel { Width = 4, Height = 40, BackColor = Theme.Current.Glow, Visible = false };
+        nav.Controls.Add(_navBar);
         NavGroup[] groups =
         {
             new("总 览", new[] { new NavItem("dashboard", "数据可视化大屏", "dashboard.view") }),
@@ -122,7 +132,7 @@ public class FMain : UIForm
             if (visible.Length == 0) continue;
             nav.Controls.Add(new UILabel
             {
-                Text = grp.Title, ForeColor = Color.FromArgb(125, 140, 162),
+                Text = grp.Title, ForeColor = Theme.Current.TextSecondary,
                 Font = new Font("微软雅黑", 8.5F), Location = new Point(16, y),
                 Size = new Size(160, 18), AutoSize = false
             });
@@ -134,8 +144,10 @@ public class FMain : UIForm
                 {
                     Text = "  " + it.Text, TextAlign = ContentAlignment.MiddleLeft,
                     Location = new Point(8, y), Size = new Size(184, 40),
-                    FillColor = Color.FromArgb(32, 41, 56), RectColor = Color.FromArgb(32, 41, 56),
-                    ForeColor = Color.White, Font = new Font("微软雅黑", 10F), Cursor = Cursors.Hand
+                    FillColor = Theme.Current.NavBg, RectColor = Theme.Current.NavBg,
+                    ForeColor = Theme.Current.LabelColor, Font = new Font("微软雅黑", 10F), Cursor = Cursors.Hand,
+                    StyleCustomMode = true, FillHoverColor = Theme.Current.NavActive, RectHoverColor = Theme.Current.NavActive,
+                    ForeHoverColor = Theme.Current.TextPrimary
                 };
                 btn.Click += (_, _) => ShowPage(key);
                 nav.Controls.Add(btn);
@@ -146,21 +158,21 @@ public class FMain : UIForm
         }
 
         // ---- 底部状态栏：数据库信息 + 实时时钟 ----
-        var status = new Panel { Dock = DockStyle.Bottom, Height = 30, BackColor = Color.FromArgb(238, 242, 247) };
+        var status = new Panel { Dock = DockStyle.Bottom, Height = 30, BackColor = Theme.Current.PanelBg };
         status.Paint += (_, e) =>
         {
-            using var pen = new Pen(Color.FromArgb(216, 222, 230));
+            using var pen = new Pen(Theme.Current.Border);
             e.Graphics.DrawLine(pen, 0, 0, status.Width, 0);
         };
         var lblDb = new UILabel
         {
             Text = "数据库：IndustrialRepairDb（LocalDB）· 16 表 / 9 存储过程 / 3 触发器 / 4 视图",
-            ForeColor = Color.FromArgb(110, 122, 138), Font = new Font("微软雅黑", 8.5F),
+            ForeColor = Theme.Current.TextSecondary, Font = new Font("微软雅黑", 8.5F),
             Location = new Point(14, 6), Size = new Size(580, 18), AutoSize = false
         };
         _lblClock = new UILabel
         {
-            ForeColor = Color.FromArgb(110, 122, 138), Font = new Font("微软雅黑", 8.5F),
+            ForeColor = Theme.Current.TextSecondary, Font = new Font("微软雅黑", 8.5F),
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
             Location = new Point(ClientSize.Width - 448, 6), Size = new Size(430, 18),
             AutoSize = false, TextAlign = ContentAlignment.MiddleRight
@@ -168,16 +180,16 @@ public class FMain : UIForm
         var lblAbout = new UILabel
         {
             Text = "关于", AutoSize = true, Location = new Point(ClientSize.Width - 520, 6),
-            Font = new Font("微软雅黑", 8.5F), ForeColor = Color.FromArgb(41, 108, 202),
+            Font = new Font("微软雅黑", 8.5F), ForeColor = Theme.Current.Cyan,
             Cursor = Cursors.Hand
         };
         lblAbout.Click += (_, _) => new FAbout().ShowDialog(this);
 
-        // R13：连接健康指示灯（时钟 Timer 每 30 秒刷新颜色）
+        // R13：连接健康指示灯（后台每 30 秒检测一次，不占用界面线程）
         _lblHealth = new UILabel
         {
             Text = "● 已连接", AutoSize = true, Location = new Point(ClientSize.Width - 570, 6),
-            Font = new Font("微软雅黑", 8.5F), ForeColor = Color.FromArgb(80, 160, 90),
+            Font = new Font("微软雅黑", 8.5F), ForeColor = Theme.Current.Success,
             Cursor = Cursors.Hand, Tag = "health"
         };
         status.Controls.AddRange(new Control[] { lblDb, _lblClock, lblAbout, _lblHealth });
@@ -185,6 +197,10 @@ public class FMain : UIForm
         _clockTimer.Tick += (_, _) => TickClock();
         TickClock();
         _clockTimer.Start();
+        _healthTimer.Interval = 30_000;
+        _healthTimer.Tick += (_, _) => _ = CheckHealthAsync();
+        _healthTimer.Start();
+        _ = CheckHealthAsync();
 
         // Dock 布局：后添加的先参与停靠（顶栏 → 导航 → 状态栏 → 内容填充）
         Controls.Add(_content);
@@ -282,22 +298,27 @@ public class FMain : UIForm
         _lblClock.Text = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
             + " 星期" + "日一二三四五六"[(int)DateTime.Now.DayOfWeek]
             + "  ·  F5 刷新 · Ctrl+K 搜索";
+    }
 
-        // R13：连接健康指示（每次时钟滴答检测一次）
-        if (_lblHealth != null)
+    /// <summary>R13：后台 ping 数据库，结果回到界面线程刷新健康灯。</summary>
+    private async System.Threading.Tasks.Task CheckHealthAsync()
+    {
+        if (_healthBusy || _lblHealth == null) return;
+        _healthBusy = true;
+        bool ok;
+        try
         {
-            try
-            {
-                IndustrialRepair.DAL.DbHelper.ExecuteScalar("SELECT 1");
-                _lblHealth.Text = "● 已连接";
-                _lblHealth.ForeColor = Color.FromArgb(80, 160, 90);
-            }
-            catch
-            {
-                _lblHealth.Text = "● 断开";
-                _lblHealth.ForeColor = Color.Firebrick;
-            }
+            await System.Threading.Tasks.Task.Run(() => IndustrialRepair.DAL.DbHelper.ExecuteScalar("SELECT 1"));
+            ok = true;
         }
+        catch
+        {
+            ok = false;
+        }
+        _healthBusy = false;
+        if (IsDisposed || _lblHealth == null) return;
+        _lblHealth.Text = ok ? "● 已连接" : "● 断开";
+        _lblHealth.ForeColor = ok ? Theme.Current.Success : Theme.Current.Danger;
     }
 
     /// <summary>F5 刷新 / Ctrl+K 全局搜索（R4 + OR6）。</summary>
@@ -355,10 +376,14 @@ public class FMain : UIForm
         foreach (var (k, b) in _navButtons)
         {
             var selected = k == key;
-            b.FillColor = selected ? Color.FromArgb(64, 134, 240) : Color.FromArgb(32, 41, 56);
+            b.FillColor = selected ? Theme.Current.NavActive : Theme.Current.NavBg;
             b.RectColor = b.FillColor;
+            b.ForeColor = selected ? Theme.Current.TextPrimary : Theme.Current.LabelColor;
             b.Font = new Font("微软雅黑", 10F, selected ? FontStyle.Bold : FontStyle.Regular);
-            if (selected) _lblPage.Text = "／  " + b.Text.Trim();
+            if (!selected) continue;
+            _lblPage.Text = "／  " + b.Text.Trim();
+            _navBar.Top = b.Top;
+            _navBar.Visible = true;
         }
     }
 }
