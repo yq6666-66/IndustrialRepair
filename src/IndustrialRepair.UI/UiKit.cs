@@ -560,8 +560,10 @@ internal static class Ui
     }
 
     /// <summary>ESC 关闭对话框（无 CancelButton 的轻量对话框统一行为）。</summary>
+    /// <summary>轻量对话框统一入口：ESC 关闭，并套用深色对话框主题（UIForm）。</summary>
     public static void CloseOnEsc(Form form)
     {
+        if (form is UIForm uf) ApplyDialogTheme(uf);
         form.KeyPreview = true;
         form.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) form.Close(); };
     }

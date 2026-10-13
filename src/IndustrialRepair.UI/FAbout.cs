@@ -18,7 +18,7 @@ internal class FAbout : UIForm
         Ui.CloseOnEsc(this);
         ClientSize = new Size(480, 430);
         StartPosition = FormStartPosition.CenterParent;
-        BackColor = Color.White;
+        Ui.ApplyDialogTheme(this);
 
         var lblTitle = new UILabel
         {
@@ -59,7 +59,7 @@ internal class FAbout : UIForm
             $"邮件通道：{(EmailSenderFactory.Create().Enabled ? "SMTP 已配置" : "演示模式（未配置 Smtp）")}\n" +
             $"主题：深灰电光蓝\n" +
             $"\n── 测试基线 ──\n" +
-            $"单元测试：145/145 通过\n" +
+            $"单元测试：169/169 通过\n" +
             $"端到端冒烟：85/85 通过\n" +
             $"安全扫描：Mimosa 深度扫描 0 发现项\n" +
             $"\n── DataGridView 最佳实践（课程对齐）──\n" +

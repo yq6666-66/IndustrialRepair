@@ -23,6 +23,7 @@ internal class FStockAdjust : UIForm
 
     public FStockAdjust()
     {
+        Ui.ApplyDialogTheme(this);
         Text = "库存盘点调整";
         Ui.CloseOnEsc(this);
         ClientSize = new Size(700, 500);

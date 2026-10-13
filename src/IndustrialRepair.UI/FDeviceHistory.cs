@@ -14,6 +14,7 @@ internal class FDeviceHistory : UIForm
 {
     public FDeviceHistory(Device device)
     {
+        Ui.ApplyDialogTheme(this);
         Text = $"维护历史 — {device.DeviceCode} {device.DeviceName}";
         Ui.CloseOnEsc(this);
         ClientSize = new Size(720, 500);
