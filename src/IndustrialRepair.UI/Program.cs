@@ -14,7 +14,6 @@ static class Program
         { Handle(e.Exception, "Task异常"); e.SetObserved(); };
 
         ApplicationConfiguration.Initialize();
-        Theme.Load();   // OR1：启动加载主题偏好
         try
         {
             // M0：登录前结构检查/升级（失败阻止进入业务系统，重启可重试）

@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\IndustrialRepair.BLL\IndustrialRepair.BLL.csproj" />
+    <ProjectReference Include="..\..\src\IndustrialRepair.UI\IndustrialRepair.UI.csproj" />
   </ItemGroup>
 
 </Project>

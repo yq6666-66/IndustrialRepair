@@ -57,7 +57,7 @@ internal class FAbout : UIForm
             $"数据库：{dbStatus}\n" +
             $"识别引擎：{OnnxImageRecognizer.EngineMode}\n" +
             $"邮件通道：{(EmailSenderFactory.Create().Enabled ? "SMTP 已配置" : "演示模式（未配置 Smtp）")}\n" +
-            $"主题：{(Theme.IsDark ? "暗色" : "亮色")}\n" +
+            $"主题：深灰电光蓝\n" +
             $"\n── 测试基线 ──\n" +
             $"单元测试：145/145 通过\n" +
             $"端到端冒烟：85/85 通过\n" +

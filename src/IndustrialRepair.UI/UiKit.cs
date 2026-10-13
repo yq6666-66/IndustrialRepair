@@ -17,13 +17,14 @@ internal readonly record struct GridCol(
 /// <summary>界面小工具：统一尺寸的控件工厂与消息提示。</summary>
 internal static class Ui
 {
-    public static UIButton Btn(string text, int x, int y, int w = 88, int h = 34, EventHandler? onClick = null)
+    public static UIButton Btn(string text, int x, int y, int w = 88, int h = 34, EventHandler? onClick = null, bool primary = false)
     {
         var b = new UIButton
         {
             Text = text, Location = new Point(x, y), Size = new Size(w, h),
             Font = new Font("微软雅黑", 9.5F), Cursor = Cursors.Hand
         };
+        StyleButton(b, primary);
         if (onClick != null) b.Click += onClick;
         // R26：自动挂 ToolTip（按钮文字即提示）
         _tip.SetToolTip(b, text);
@@ -32,6 +33,28 @@ internal static class Ui
 
     private static readonly ToolTip _tip = new() { AutoPopDelay = 3000, InitialDelay = 400 };
 
+    /// <summary>按钮主题：primary 为电光蓝实心，默认为深色描边（Ghost）。</summary>
+    public static void StyleButton(UIButton b, bool primary = false)
+    {
+        var t = Theme.Current;
+        b.StyleCustomMode = true;
+        b.FillColor = primary ? t.Accent : t.CardBg;
+        b.FillHoverColor = primary ? t.Accent : t.NavActive;
+        b.FillPressColor = primary ? t.Accent : t.NavActive;
+        b.FillSelectedColor = b.FillColor;
+        b.FillDisableColor = t.CardBg;
+        b.RectColor = primary ? t.Accent : t.InputBorder;
+        b.RectHoverColor = t.Glow;
+        b.RectPressColor = t.Glow;
+        b.RectSelectedColor = b.RectColor;
+        b.RectDisableColor = t.Border;
+        b.ForeColor = primary ? Color.White : t.TextPrimary;
+        b.ForeHoverColor = primary ? Color.White : t.Glow;
+        b.ForePressColor = primary ? Color.White : t.Glow;
+        b.ForeSelectedColor = b.ForeColor;
+        b.ForeDisableColor = t.TextSecondary;
+    }
+
     public static UITextBox Txt(string watermark, int x, int y, int w = 200, bool password = false)
     {
         var t = new UITextBox
@@ -39,14 +62,78 @@ internal static class Ui
             Watermark = watermark, Location = new Point(x, y), Size = new Size(w, 30),
             PasswordChar = password ? '*' : '\0'
         };
+        StyleText(t);
         return t;
     }
 
+    /// <summary>输入框主题：深色底、浅色字、描边随主题。</summary>
+    public static void StyleText(UITextBox t)
+    {
+        var c = Theme.Current;
+        t.StyleCustomMode = true;
+        t.FillColor = c.InputBg;
+        t.ForeColor = c.TextPrimary;
+        t.RectColor = c.InputBorder;
+        t.FillReadOnlyColor = c.CardBg;
+        t.ForeReadOnlyColor = c.TextSecondary;
+        t.RectReadOnlyColor = c.Border;
+        t.WatermarkColor = c.TextSecondary;
+        t.WatermarkActiveColor = c.TextSecondary;
+    }
+
     public static UILabel Lbl(string text, int x, int y, int w = 90)
-        => new() { Text = text, Location = new Point(x, y), Size = new Size(w, 24), AutoSize = false, TextAlign = ContentAlignment.MiddleRight };
+    {
+        var l = new UILabel { Text = text, Location = new Point(x, y), Size = new Size(w, 24), AutoSize = false, TextAlign = ContentAlignment.MiddleRight };
+        StyleLabel(l);
+        return l;
+    }
+
+    /// <summary>标签主题：统一为次级文字色，避免 SunnyUI 默认深色字落在深底上。</summary>
+    public static void StyleLabel(UILabel l)
+    {
+        l.StyleCustomMode = true;
+        l.ForeColor = Theme.Current.LabelColor;
+    }
 
     public static UIComboBox Combo(int x, int y, int w = 160)
-        => new() { Location = new Point(x, y), Size = new Size(w, 30), DropDownStyle = UIDropDownStyle.DropDownList };
+    {
+        var c = new UIComboBox { Location = new Point(x, y), Size = new Size(w, 30), DropDownStyle = UIDropDownStyle.DropDownList };
+        StyleCombo(c);
+        return c;
+    }
+
+    /// <summary>下拉框主题：输入区与下拉列表同为深色，选中项电光蓝。</summary>
+    public static void StyleCombo(UIComboBox c)
+    {
+        var t = Theme.Current;
+        c.StyleCustomMode = true;
+        c.FillColor = t.InputBg;
+        c.ForeColor = t.TextPrimary;
+        c.RectColor = t.InputBorder;
+        c.ItemFillColor = t.CardBg;
+        c.ItemForeColor = t.TextPrimary;
+        c.ItemRectColor = t.CardBg;
+        c.ItemHoverColor = t.NavActive;
+        c.ItemSelectBackColor = t.Accent;
+        c.ItemSelectForeColor = Color.White;
+        c.WatermarkColor = t.TextSecondary;
+        c.WatermarkActiveColor = t.TextSecondary;
+    }
+
+    /// <summary>对话框主题：标题栏、窗体底与关闭按钮统一到深色体系。</summary>
+    public static void ApplyDialogTheme(UIForm f)
+    {
+        var t = Theme.Current;
+        f.StyleCustomMode = true;
+        f.BackColor = t.CardBg;
+        f.ForeColor = t.TextPrimary;
+        f.TitleColor = t.HeaderBar;
+        f.TitleForeColor = t.TextPrimary;
+        f.RectColor = t.Border;
+        f.ControlBoxForeColor = t.TextPrimary;
+        f.ControlBoxFillHoverColor = t.NavActive;
+        f.ControlBoxCloseFillHoverColor = t.Danger;
+    }
 
     /// <summary>DG1：每个网格的绑定源缓存（BindExplicit 走 BindingSource 中介层）。</summary>
     private static readonly ConditionalWeakTable<DataGridView, BindingSource> _sources = new();
@@ -258,11 +345,20 @@ internal static class Ui
     public static void ApplyGridTheme(UIDataGridView g)
     {
         var t = Theme.Current;
+        g.StyleCustomMode = true;
+        g.BackColor = t.CardBg;
         g.BackgroundColor = t.GridRow;
         g.GridColor = t.Border;
+        g.RectColor = t.Border;
+        g.StripeEvenColor = t.GridRow;
+        g.StripeOddColor = t.GridAltRow;
+        g.ScrollBarColor = t.InputBorder;
+        g.ScrollBarRectColor = t.InputBorder;
+        g.ScrollBarBackColor = t.CardBg;
         g.ColumnHeadersDefaultCellStyle.BackColor = t.GridHeader;
-        g.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
+        g.ColumnHeadersDefaultCellStyle.ForeColor = t.TextPrimary;
         g.ColumnHeadersDefaultCellStyle.SelectionBackColor = t.GridHeader;
+        g.ColumnHeadersDefaultCellStyle.SelectionForeColor = t.TextPrimary;
         g.ColumnHeadersDefaultCellStyle.Font = new Font("微软雅黑", 9.5F, FontStyle.Bold);
         g.DefaultCellStyle.Font = new Font("微软雅黑", 9.5F);
         g.DefaultCellStyle.ForeColor = t.TextPrimary;
@@ -378,15 +474,16 @@ internal static class Ui
     /// <summary>页面标题条（浅灰底 + 左侧品牌竖线），Dock 到页面顶部。</summary>
     public static Control PageHeader(string title, string subtitle = "")
     {
-        var bar = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = Color.FromArgb(243, 246, 250), Padding = new Padding(12, 0, 8, 0) };
+        var t = Theme.Current;
+        var bar = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = t.PanelBg, Padding = new Padding(12, 0, 8, 0) };
         bar.Paint += (_, e) =>
         {
-            using var accent = new SolidBrush(Color.FromArgb(41, 108, 202));
+            using var accent = new SolidBrush(t.Accent);
             e.Graphics.FillRectangle(accent, 0, 8, 4, bar.Height - 16);
         };
         var l1 = new UILabel
         {
-            Text = title, AutoSize = true, ForeColor = Color.FromArgb(32, 41, 56),
+            Text = title, AutoSize = true, ForeColor = t.TextPrimary,
             Font = new Font("微软雅黑", 11F, FontStyle.Bold), Location = new Point(8, 8)
         };
         bar.Controls.Add(l1);
@@ -394,7 +491,7 @@ internal static class Ui
         {
             var l2 = new UILabel
             {
-                Text = subtitle, AutoSize = true, ForeColor = Color.FromArgb(120, 132, 148),
+                Text = subtitle, AutoSize = true, ForeColor = t.TextSecondary,
                 Font = new Font("微软雅黑", 8.5F), Anchor = AnchorStyles.Top | AnchorStyles.Left,
                 Location = new Point(16 + (int)(title.Length * 16.5f) + 24, 13)
             };
@@ -432,8 +529,10 @@ internal static class Ui
     public static string? Input(string title, string label, string def = "")
     {
         var f = new UIForm { Text = title, ClientSize = new Size(360, 140), ShowTitle = false, StartPosition = FormStartPosition.CenterParent };
+        ApplyDialogTheme(f);
         var l = Lbl(label, 10, 20, 70);
         var t = new UITextBox { Location = new Point(90, 20), Size = new Size(250, 30), Text = def };
+        StyleText(t);
         var ok = Btn("确定", 90, 70, 80, 32, (_, _) => { f.Tag = t.Text.Trim(); f.Close(); });
         var cancel = Btn("取消", 190, 70, 80, 32, (_, _) => { f.Tag = null; f.Close(); });
         f.Controls.AddRange(new Control[] { l, t, ok, cancel });
@@ -464,7 +563,10 @@ internal sealed class UiPager : Panel
         _load = load;
         Dock = DockStyle.Bottom;
         Height = 34;
-        BackColor = Color.FromArgb(243, 246, 250);
+        BackColor = Theme.Current.PanelBg;
+        Ui.StyleLabel(_info);
+        Ui.StyleLabel(_lblSize);
+        Ui.StyleCombo(_size);
 
         _size.Items.AddRange(new object[] { "50", "100", "200" });
         _size.SelectedIndex = 0;
