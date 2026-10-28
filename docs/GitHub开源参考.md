@@ -49,4 +49,4 @@
 
 ## 四、许可证合规
 
-全部直接依赖为 **MIT / Apache-2.0** 宽松协议：允许闭源使用与再分发，仅需保留版权声明。发布包中随附第三方 NOTICE 即可（毕业实训场景无额外义务）。
+直接依赖中 **除 SunnyUI 外** 均为 MIT / Apache-2.0 / MS-PL（CsvHelper）/ QuestPDF Community 等许可：允许闭源使用与再分发，仅需保留版权声明。**SunnyUI 3.9.8 为 GPL-3.0-only，具有传染性**——本项目发布编译产物（内含 SunnyUI 的 UI 程序集）时必须整体遵循 GPL-3.0，因此**本项目同样以 GPL-3.0 发布**（见仓库根目录 [LICENSE](../LICENSE)）。发布包中随附第三方 NOTICE 与许可证副本即可；如后续移除 SunnyUI 替换为宽松协议控件库，可另行评估改回 MIT。

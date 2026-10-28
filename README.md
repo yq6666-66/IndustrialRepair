@@ -4,6 +4,8 @@
 
 维修人员报修时拍照上传 → 系统自动识别涉及的维修部件 → 结合 BOM 材料表按冗余系数智能推算所需配件与数量 → 生成领料单出库 → 全程工单流转留痕，大屏可视化统计。
 
+仓库地址：<https://github.com/yq6666-66/IndustrialRepair> ｜ 许可证：**GPL-3.0**（见 [LICENSE](LICENSE)）
+
 ## 技术栈（与任务书对应）
 
 | 要求 | 实现 |
@@ -11,7 +13,7 @@
 | C# WinForm | .NET 8 WinForm，三层架构（UI / BLL / DAL / Models） |
 | SunnyUI | NuGet 3.9.8：UIForm / UIButton / UITextBox / UIComboBox / UIDataGridView / UIBarChart / UILineChart |
 | ADO.NET | SqlConnection / SqlCommand / SqlDataAdapter / DataSet / BeginTransaction-Commit-Rollback / SqlException |
-| SQL Server | LocalDB，9 张存储过程、3 个触发器、4 个视图、参数化查询防注入 |
+| SQL Server | LocalDB，21 表 / 14 存储过程 / 3 触发器 / 8 视图，Schema v5 版本化迁移，参数化查询防注入 |
 | 安全 | bcrypt 口令哈希、SHA-256 摘要、RBAC 四角色、图形验证码、多因素认证、登录锁定、会话超时、FluentValidation 集中校验 |
 | 物联网 | SerialPort 串口 + 扫码模拟器；**MQTTnet 内嵌 Broker 遥测 + 超阈值自动报修**；**设备停机追踪**（开始/结束+汇总视图） |
 | AI 辅助 | ChatGPT 等 AI 工具辅助编码（任务书允许）；拍照识别 V2 = ZXing 二维码直达 + OpenCvSharp（CLAHE/轮廓圆度）×特征库融合；**ONNX Runtime 课程模型后端**（配置就绪自动启用） |
@@ -57,10 +59,10 @@ SunnyUI 3.9.8（**GPL-3.0-only**，课堂教学/课设使用；注意其传染�
 |---|---|
 | Visual Studio 2022 Community 17.14（.NET 桌面开发工作负载） | ✅ 已装，可直接打开 `IndustrialRepair.sln` |
 | .NET SDK（9.0.306 / 8.x）+ 运行时 7/8/9 | ✅ 已装 |
-| SQL Server LocalDB（实例 MSSQLLocalDB）+ IndustrialRepairDb | ✅ 已建库播种（16 表 / 9 存储过程 / 3 触发器 / 4 视图） |
+| SQL Server LocalDB（实例 MSSQLLocalDB）+ IndustrialRepairDb | ✅ 已建库播种（21 表 / 14 存储过程 / 3 触发器 / 8 视图，Schema v5） |
 | SSMS（SQL Server Management Studio） | ✅ 已装（连 `(localdb)\MSSQLLocalDB`） |
 | 7-Zip | ✅ 已装（打包提交件） |
-| git 仓库 | ✅ 已初始化并首次提交（本地仓库） |
+| git 仓库 | ✅ 已开源：<https://github.com/yq6666-66/IndustrialRepair>（含 v1.0.0 ~ v1.8.0 全部版本标签） |
 | Release 发布包 | ✅ `publish/IndustrialRepair.UI.exe`，桌面快捷方式「工业维修智能化零件分配平台」 |
 
 > 换机重装参考：`winget install Microsoft.DotNet.SDK.8 7zip.7zip Microsoft.SQLServerManagementStudio`（VS2022 Community 用 Visual Studio Installer 勾选「.NET 桌面开发」），然后登录页点「一键初始化」。
@@ -113,7 +115,7 @@ Visual Studio 2022 直接打开 `IndustrialRepair.sln`，将 IndustrialRepair.UI
 ```
 IndustrialRepair/
 ├─ IndustrialRepair.sln
-├─ db/                      # SQL 脚本（01 建库建表+种子 / 02 存储过程+触发器+视图 / 03 SQL 冒烟测试）
+├─ db/                      # SQL 脚本 01~07（建库建表+种子 / 存储过程+触发器+视图 / 冒烟测试 / 材料审阅迁移 / 性能索引 / 新功能 / PM 工单关联）
 ├─ src/
 │  ├─ IndustrialRepair.UI/     # WinForm + SunnyUI 界面层（FLogin/FMain/Uc* 页面）
 │  ├─ IndustrialRepair.BLL/    # 业务层（认证/工单/算料/识别/串口/会话）
@@ -156,7 +158,7 @@ IndustrialRepair/
 
 ## 当前边界与如实说明（验收口径）
 
-- **MFA/找回密码为演示流程**：邮箱验证码在界面直接显示，未接入真实 SMTP；报告与演示按“模拟邮箱通道”表述
+- **MFA/找回密码走 MailKit 真实邮件通道**：`appsettings.json` 配好 `Smtp` 节即真实发送验证码到邮箱；未配置或发送失败时回退演示模式（验证码在界面显示）并记日志
 - **识别 Score 是匹配分数**（颜色/形状/尺寸相似度加权），不是校准后的正确概率；低分（<60）仅作人工核对提示
 - **未实测项**：真实扫码枪、山海鲸实际大屏（可用大屏页“导出CSV”作数据源）、课程识别模型效果——均标注“待实物/待模型验证”，未用模拟冒充
 - **整机 BOM 配料语义**（用户已确认）：算料生成整台设备 BOM；人工确认仅标记维修重点（BOM 内★标记不改数量，BOM 外按人工用量×冗余追加）；生成领料前必须完成材料审阅
@@ -170,3 +172,7 @@ IndustrialRepair/
 - **接口隔离**：`IImageRecognizer`（课程模型同接口替换）/ `IScannerInput`（串口/模拟器/图片/手动同流程）；照片一次准备（压缩+识别）贯穿预览与提交
 - **服务层守卫**：会话 + 权限 + 操作者一致 + 工程师限获派单（界面显隐之外的第二层）
 - **测试隔离**：冒烟/评测工具必须显式 `--conn` 指向独立测试库，业务库拒绝写入型测试
+
+## 许可证
+
+本项目以 **[GPL-3.0](LICENSE)** 发布。原因是界面层依赖 SunnyUI 3.9.8（GPL-3.0-only），分发本项目的编译产物时必须整体遵循 GPL-3.0 条款；若用于课程学习、二次开发或再分发，请同样保留本许可证与原作者版权声明。其余第三方组件的许可（MIT / Apache-2.0 / MS-PL / QuestPDF Community）见 [docs/GitHub开源参考.md](docs/GitHub开源参考.md)。
